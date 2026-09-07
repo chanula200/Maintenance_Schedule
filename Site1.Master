@@ -1,0 +1,134 @@
+<%@ Master Language="C#" AutoEventWireup="true" CodeBehind="Site1.master.cs" Inherits="Routine_Maintenance.Site1" %>
+
+<script runat="server">
+    protected void Page_Init(object sender, EventArgs e)
+    {
+        if (Session["serviceno"] == null || string.IsNullOrEmpty(Session["serviceno"].ToString()))
+        {
+            Session["serviceno"] = "012264";
+            Session["username"] = "Admin";
+            Session["user_profile"] = "admin";
+            Session["passwd"] = "";
+        }
+    }
+</script>
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head runat="server">
+    <title>
+        <asp:ContentPlaceHolder ID="title" runat="server">
+            Maintenance Schedule     
+        </asp:ContentPlaceHolder>
+    </title>
+
+    <link href="Style/Style.css" rel="stylesheet" />
+     <asp:ContentPlaceHolder ID="head" runat="server">
+    </asp:ContentPlaceHolder>
+
+    <style type="text/css">
+        .auto-style1 {
+            position: relative;
+            margin: 0px;
+            padding: 0px;
+            background: #4b6c9e;
+            width: 100%;
+            left: 0px;
+            top: 0px;
+        }
+    </style>
+</head>
+<body>
+    <form runat="server">
+    <div class="page">
+        <div class="auto-style1">
+            <div class="title">
+                <h1 style="color: #FFFFFF; font-size: x-large; font-weight: bold">
+                   Maintenance Schedule 
+                </h1>
+            </div>
+            <div class="loginDisplay">
+                &nbsp;
+                &nbsp;<asp:Label ID="Label1" runat="server"></asp:Label>
+                &nbsp;<asp:LinkButton ID="LinkButton1" runat="server" CausesValidation="False" onclick="LinkButton1_Click"></asp:LinkButton>
+&nbsp;
+              <%--  <asp:LinkButton ID="LinkButton1" runat="server" onclick="LinkButton1_Click"></asp:LinkButton>--%>
+&nbsp;&nbsp;
+            </div>
+            <div class="clear hideSkiplink">
+                <asp:Menu ID="NavigationMenu" runat="server" CssClass="menu" EnableViewState="false" IncludeStyleBlock="false" Orientation="Horizontal">
+                    <Items>
+                          <asp:MenuItem Text="Dashboards" Value="Tasks">
+                            <asp:MenuItem NavigateUrl="~/View.aspx" Text="View Recent" 
+                                Value="View Recent"></asp:MenuItem> 
+                              <asp:MenuItem NavigateUrl="~/towerstatus.aspx" Text="Tower Dashboard" Value="Tower Dashboard">
+                        </asp:MenuItem>
+                         <asp:MenuItem NavigateUrl="~/summary.aspx" Text="Summary" 
+                                Value="Summary"></asp:MenuItem> 
+                              <asp:MenuItem NavigateUrl="~/summary2024.aspx" Text="Summary2024" 
+                                Value="Summary"></asp:MenuItem> 
+                              
+                              <asp:MenuItem NavigateUrl="~/pwdb.aspx" Text="History View" 
+                                Value="Summary"></asp:MenuItem>
+
+                              
+                              
+                        </asp:MenuItem>
+                         
+                       
+                        <asp:MenuItem NavigateUrl="~/ToDo.aspx" Text="To Do" Value="To Do">
+                        </asp:MenuItem>
+                        
+                        <asp:MenuItem Text="New" Value="New">
+                            <asp:MenuItem NavigateUrl="~/NewToDo.aspx" Text="New To Do" Value="New To Do"></asp:MenuItem>
+                        </asp:MenuItem>
+                        
+                        <asp:MenuItem NavigateUrl="~/closedtask.aspx" Text="Complted Tasks" Value="Completed Tasks">
+                        </asp:MenuItem>
+                       <asp:MenuItem NavigateUrl="~/twhqmtc.aspx" Text="Tower Maintenance" Value="Tower Maintenance">
+                        </asp:MenuItem>
+                         <asp:MenuItem NavigateUrl="~/twreport.aspx" Text="Tower Report" Value="Tower Report">
+                        </asp:MenuItem>
+                        <asp:MenuItem Text="Sys_Config" Value="Sys_Config">
+                             <asp:MenuItem NavigateUrl="~/asignlea.aspx" Text="Assign_LEAs" Value="Assign_LEAs">
+                          <%-- --%>
+                        </asp:MenuItem>
+                            <asp:MenuItem NavigateUrl="~/deleteNode.aspx" Text="Delete Node" Value="Delete Node"></asp:MenuItem> 
+                             <asp:MenuItem NavigateUrl="~/chngnteneg.aspx" Text="Change ntw Eng" Value="Change Ntw Eng"></asp:MenuItem>
+                             <asp:MenuItem NavigateUrl="~/chnglea.aspx" Text="LEA Details" Value="LEA Details"></asp:MenuItem>  
+                            <asp:MenuItem NavigateUrl="~/chngnode.aspx" Text="Node Details" Value="Node Details"></asp:MenuItem>  
+                             <%--<asp:MenuItem NavigateUrl="~/addtask.aspx" Text="Add_Task" 
+                                Value="Add_Task"></asp:MenuItem>  --%>
+                       </asp:MenuItem> 
+                        <asp:MenuItem Text="User Config" Value="User Config">
+                               <asp:MenuItem NavigateUrl="~/addadmin.aspx" Text="Add Admin" 
+                                Value="Add Admin"></asp:MenuItem>       
+                            <%--<asp:MenuItem NavigateUrl="~/add_PlatformOwner.aspx" Text="Add_Platform Owner" 
+                                Value="Add_Platform Owner"></asp:MenuItem>  --%>
+                            <asp:MenuItem NavigateUrl="~/addUser.aspx" Text="Add User" 
+                                Value="Add User"></asp:MenuItem>  
+                           <%-- <asp:MenuItem NavigateUrl="~/addmuser.aspx" Text="Add_2nd_Owner" 
+                                Value="Add_2nd_Owner"></asp:MenuItem>    --%>
+                       </asp:MenuItem>
+                       
+                        
+                    </Items>
+                </asp:Menu>
+            </div>
+        </div>
+        <div class="content">
+
+                <asp:ContentPlaceHolder ID="contentboddy" runat="server">
+        
+                </asp:ContentPlaceHolder>
+            </div> 
+     <div class="clear">
+       
+    </div>
+    <div class="footer">
+        
+    </div></div>
+    </form>
+</body>
+</html>
