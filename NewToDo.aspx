@@ -137,10 +137,6 @@
                             </asp:HyperLink>
                         </ItemTemplate>
                     </asp:TemplateField>
-                    <asp:BoundField DataField="MSAN" HeaderText="MSAN" ReadOnly="True" SortExpression="MSAN" />
-                    <asp:BoundField DataField="IPNW" HeaderText="IPNW" ReadOnly="True" SortExpression="IPNW" />
-                    <asp:BoundField DataField="SLBN_SDH" HeaderText="SLBN / SDH" ReadOnly="True" SortExpression="SLBN_SDH" />
-                    <asp:BoundField DataField="Tower" HeaderText="Tower" ReadOnly="True" SortExpression="Tower" />
                     <asp:BoundField DataField="ITMC" HeaderText="ITMC" ReadOnly="True" SortExpression="ITMC" />
                     <asp:BoundField DataField="SMW4" HeaderText="SMW4" ReadOnly="True" SortExpression="SMW4" />
                     <asp:BoundField DataField="DSCN" HeaderText="DSCN" ReadOnly="True" SortExpression="DSCN" />

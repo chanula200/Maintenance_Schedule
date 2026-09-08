@@ -227,10 +227,6 @@
                             <asp:ListItem Text="SMW4" Value="SMW4"></asp:ListItem>
                             <asp:ListItem Text="DSCN" Value="DSCN"></asp:ListItem>
                             <asp:ListItem Text="BLCS" Value="BLCS"></asp:ListItem>
-                            <asp:ListItem Text="MSAN" Value="MSAN"></asp:ListItem>
-                            <asp:ListItem Text="IPNW" Value="IPNW"></asp:ListItem>
-                            <asp:ListItem Text="SLBN/SDH" Value="SLBN/SDH"></asp:ListItem>
-                            <asp:ListItem Text="Tower" Value="Tower"></asp:ListItem>
                         </asp:DropDownList>
                     </td>
                 </tr>
