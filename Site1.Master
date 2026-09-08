@@ -79,11 +79,6 @@
                        
                         <asp:MenuItem NavigateUrl="~/ToDo.aspx" Text="To Do" Value="To Do">
                         </asp:MenuItem>
-                        
-                        <asp:MenuItem Text="New" Value="New">
-                            <asp:MenuItem NavigateUrl="~/NewToDo.aspx" Text="New To Do" Value="New To Do"></asp:MenuItem>
-                        </asp:MenuItem>
-                        
                         <asp:MenuItem NavigateUrl="~/closedtask.aspx" Text="Complted Tasks" Value="Completed Tasks">
                         </asp:MenuItem>
                        <asp:MenuItem NavigateUrl="~/twhqmtc.aspx" Text="Tower Maintenance" Value="Tower Maintenance">
@@ -111,7 +106,19 @@
                            <%-- <asp:MenuItem NavigateUrl="~/addmuser.aspx" Text="Add_2nd_Owner" 
                                 Value="Add_2nd_Owner"></asp:MenuItem>    --%>
                        </asp:MenuItem>
-                       
+                        <asp:MenuItem Text="International" Value="International">
+                            <asp:MenuItem Text="Dashboards" Value="Dashboards">
+                                <asp:MenuItem NavigateUrl="~/View.aspx" Text="View Recent" Value="View Recent"></asp:MenuItem>
+                                <asp:MenuItem NavigateUrl="~/summary.aspx" Text="Summary" Value="Summary"></asp:MenuItem>
+                                <asp:MenuItem NavigateUrl="~/pwdb.aspx" Text="History View" Value="History View"></asp:MenuItem>
+                            </asp:MenuItem>
+                            <asp:MenuItem NavigateUrl="~/NewToDo.aspx" Text="To Do" Value="To Do"></asp:MenuItem>
+                            <asp:MenuItem NavigateUrl="#" Text="Completed Tasks" Value="Completed Tasks"></asp:MenuItem>
+                            <asp:MenuItem Text="User Config" Value="User Config">
+                                <asp:MenuItem NavigateUrl="~/addadmin.aspx" Text="Add Admin" Value="Add Admin"></asp:MenuItem>
+                                <asp:MenuItem NavigateUrl="~/addUser.aspx" Text="Add User" Value="Add User"></asp:MenuItem>
+                            </asp:MenuItem>
+                        </asp:MenuItem>
                         
                     </Items>
                 </asp:Menu>
