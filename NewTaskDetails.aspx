@@ -16,6 +16,12 @@
                 lblPageHeader.Text = "All Active Tasks (All LEAs)";
                 lblLeaBreadcrumb.Text = "All LEAs";
             }
+
+            string plat = Request.QueryString["Platform"];
+            if (!string.IsNullOrEmpty(plat) && ddlPlatformFilter.Items.FindByValue(plat) != null)
+            {
+                ddlPlatformFilter.SelectedValue = plat;
+            }
         }
     }
 
@@ -23,6 +29,35 @@
     {
         gvTaskDetails.PageIndex = 0;
         gvTaskDetails.DataBind();
+    }
+
+    protected string FormatMaintenanceTasks(object taskObj)
+    {
+        if (taskObj == null || taskObj == DBNull.Value) return "";
+        string taskStr = taskObj.ToString();
+        if (string.IsNullOrEmpty(taskStr)) return "";
+
+        string[] tasks = taskStr.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+        if (tasks.Length <= 1)
+        {
+            return Server.HtmlEncode(taskStr.Trim());
+        }
+
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        sb.Append("<div class='subtask-list'>");
+        for (int i = 0; i < tasks.Length; i++)
+        {
+            string t = tasks[i].Trim();
+            if (!string.IsNullOrEmpty(t))
+            {
+                sb.Append("<div class='subtask-item'>");
+                sb.Append("<span class='subtask-bullet'>&bull;</span> ");
+                sb.Append(Server.HtmlEncode(t));
+                sb.Append("</div>");
+            }
+        }
+        sb.Append("</div>");
+        return sb.ToString();
     }
 </script>
 
@@ -32,6 +67,22 @@
 
 <asp:Content ID="Content2" ContentPlaceHolderID="head" runat="server">
     <style type="text/css">
+        .subtask-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 3px 0;
+            text-align: left;
+        }
+        .subtask-item {
+            line-height: 1.35;
+            font-size: 13px;
+        }
+        .subtask-bullet {
+            color: #2461BF;
+            font-weight: bold;
+            margin-right: 4px;
+        }
         .task-container {
             padding: 15px 25px;
             font-family: "Segoe UI", Arial, Helvetica, sans-serif;
@@ -207,7 +258,11 @@
                         </ItemTemplate>
                     </asp:TemplateField>
                     <asp:BoundField DataField="Priority" HeaderText="Priority" SortExpression="Priority" />
-                    <asp:BoundField DataField="Maintenance_Task" HeaderText="Maintenance Task" SortExpression="Maintenance_Task" ItemStyle-HorizontalAlign="Left" HeaderStyle-HorizontalAlign="Left" />
+                    <asp:TemplateField HeaderText="Maintenance Task" SortExpression="Maintenance_Task" ItemStyle-HorizontalAlign="Left" HeaderStyle-HorizontalAlign="Left">
+                        <ItemTemplate>
+                            <%# FormatMaintenanceTasks(Eval("Maintenance_Task")) %>
+                        </ItemTemplate>
+                    </asp:TemplateField>
                     <asp:BoundField DataField="Frequency" HeaderText="Frequency" SortExpression="Frequency" />
                     <asp:BoundField DataField="Scheduled_Date" HeaderText="Scheduled Date" DataFormatString="{0:yyyy-MM-dd}" SortExpression="Scheduled_Date" />
                     <asp:BoundField DataField="End_Date" HeaderText="End Date" DataFormatString="{0:yyyy-MM-dd}" SortExpression="End_Date" />

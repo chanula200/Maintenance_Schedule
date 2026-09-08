@@ -86,6 +86,22 @@
 
             txtCompletedDate.Text = DateTime.Now.ToString("yyyy-MM-dd");
 
+            string defaultBackUrl = "NewTaskDetails.aspx";
+            List<string> defaultParams = new List<string>();
+            if (!string.IsNullOrEmpty(lea) && lea != "N/A")
+            {
+                defaultParams.Add("LEA_Name=" + Server.UrlEncode(lea));
+            }
+            if (!string.IsNullOrEmpty(platform))
+            {
+                defaultParams.Add("Platform=" + Server.UrlEncode(platform));
+            }
+            if (defaultParams.Count > 0)
+            {
+                defaultBackUrl += "?" + string.Join("&", defaultParams);
+            }
+            lnkBack.NavigateUrl = defaultBackUrl;
+
             LoadAndBindTasks(formId, nodeName, platform, lea, freq, endDate);
         }
     }
@@ -223,6 +239,25 @@
                                 lblScheduledDate.Text = sd.ToString("yyyy-MM-dd");
                             }
                         }
+
+                        string effectiveLea = (dt.Rows[0]["LEA_Name"] != DBNull.Value && dt.Rows[0]["LEA_Name"].ToString() != "N/A") ? dt.Rows[0]["LEA_Name"].ToString() : lea;
+                        string effectivePlatform = (dt.Rows[0]["Platform"] != DBNull.Value) ? dt.Rows[0]["Platform"].ToString() : platform;
+
+                        string backUrl = "NewTaskDetails.aspx";
+                        List<string> qParams = new List<string>();
+                        if (!string.IsNullOrEmpty(effectiveLea) && effectiveLea != "N/A")
+                        {
+                            qParams.Add("LEA_Name=" + Server.UrlEncode(effectiveLea));
+                        }
+                        if (!string.IsNullOrEmpty(effectivePlatform))
+                        {
+                            qParams.Add("Platform=" + Server.UrlEncode(effectivePlatform));
+                        }
+                        if (qParams.Count > 0)
+                        {
+                            backUrl += "?" + string.Join("&", qParams);
+                        }
+                        lnkBack.NavigateUrl = backUrl;
 
                         foreach (DataRow row in dt.Rows)
                         {
@@ -728,7 +763,7 @@
 
             <div style="margin-top: 20px;">
                 <asp:Button ID="btnSubmit" runat="server" Text="Submit" CssClass="btn-submit" OnClick="btnSubmit_Click" />
-                <a href='<%# "NewTaskDetails.aspx?LEA_Name=" + Server.UrlEncode(Request.QueryString["LEA_Name"] ?? "") %>' class="btn-back-link">&laquo; Back to Task Details</a>
+                <asp:HyperLink ID="lnkBack" runat="server" CssClass="btn-back-link">&laquo; Back to Task Details</asp:HyperLink>
             </div>
         </asp:Panel>
     </div>
