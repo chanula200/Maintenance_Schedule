@@ -22,10 +22,22 @@
             {
                 ddlPlatformFilter.SelectedValue = plat;
             }
+
+            string freqType = Request.QueryString["FrequencyType"];
+            if (!string.IsNullOrEmpty(freqType) && ddlFrequencyFilter.Items.FindByValue(freqType) != null)
+            {
+                ddlFrequencyFilter.SelectedValue = freqType;
+            }
         }
     }
 
     protected void ddlPlatformFilter_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        gvTaskDetails.PageIndex = 0;
+        gvTaskDetails.DataBind();
+    }
+
+    protected void ddlFrequencyFilter_SelectedIndexChanged(object sender, EventArgs e)
     {
         gvTaskDetails.PageIndex = 0;
         gvTaskDetails.DataBind();
@@ -220,7 +232,14 @@
                         <span style="color: #666;">Click any <b>Node Name</b> below to open its maintenance form.</span>
                     </td>
                     <td style="text-align: right;">
-                        <span style="font-weight: bold; font-size: 13px;">Filter by Platform: </span>
+                        <span style="font-weight: bold; font-size: 13px;">Frequency: </span>
+                        <asp:DropDownList ID="ddlFrequencyFilter" runat="server" AutoPostBack="True" OnSelectedIndexChanged="ddlFrequencyFilter_SelectedIndexChanged" style="padding: 4px 8px; font-size: 13px; margin-right: 12px;">
+                            <asp:ListItem Text="-- All Frequencies --" Value="All"></asp:ListItem>
+                            <asp:ListItem Text="Periodic Tasks" Value="Periodic"></asp:ListItem>
+                            <asp:ListItem Text="Daily Tasks" Value="Daily"></asp:ListItem>
+                        </asp:DropDownList>
+
+                        <span style="font-weight: bold; font-size: 13px;">Platform: </span>
                         <asp:DropDownList ID="ddlPlatformFilter" runat="server" AutoPostBack="True" OnSelectedIndexChanged="ddlPlatformFilter_SelectedIndexChanged" style="padding: 4px 8px; font-size: 13px;">
                             <asp:ListItem Text="-- All Platforms --" Value="All"></asp:ListItem>
                             <asp:ListItem Text="ITMC" Value="ITMC"></asp:ListItem>
@@ -291,6 +310,7 @@
                 <SelectParameters>
                     <asp:QueryStringParameter DefaultValue="All" Name="LEA_Name" QueryStringField="LEA_Name" Type="String" />
                     <asp:ControlParameter ControlID="ddlPlatformFilter" DefaultValue="All" Name="Platform" PropertyName="SelectedValue" Type="String" />
+                    <asp:ControlParameter ControlID="ddlFrequencyFilter" DefaultValue="All" Name="FrequencyType" PropertyName="SelectedValue" Type="String" />
                 </SelectParameters>
             </asp:SqlDataSource>
         </div>

@@ -113,7 +113,7 @@
                                 <asp:MenuItem NavigateUrl="~/pwdb.aspx" Text="History View" Value="History View"></asp:MenuItem>
                             </asp:MenuItem>
                             <asp:MenuItem NavigateUrl="~/NewToDo.aspx" Text="To Do" Value="To Do"></asp:MenuItem>
-                            <asp:MenuItem NavigateUrl="#" Text="Completed Tasks" Value="Completed Tasks"></asp:MenuItem>
+                            <asp:MenuItem NavigateUrl="~/closedtask.aspx" Text="Completed Tasks" Value="Completed Tasks"></asp:MenuItem>
                             <asp:MenuItem Text="User Config" Value="User Config">
                                 <asp:MenuItem NavigateUrl="~/addadmin.aspx" Text="Add Admin" Value="Add Admin"></asp:MenuItem>
                                 <asp:MenuItem NavigateUrl="~/addUser.aspx" Text="Add User" Value="Add User"></asp:MenuItem>

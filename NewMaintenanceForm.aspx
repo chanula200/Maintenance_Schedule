@@ -4,7 +4,7 @@
 <%@ Import Namespace="System.Configuration" %>
 <%@ Import Namespace="System.Collections.Generic" %>
 
-<script runat="server">
+<script runat="server" language="C#" type="text/c#">
 
     [Serializable]
     public class SubTaskItem
@@ -24,6 +24,11 @@
     private static bool CheckIsValueTask(string taskName, out string placeholder)
     {
         string lower = taskName.ToLowerInvariant();
+        if (lower.Contains("current") && lower.Contains("voltage"))
+        {
+            placeholder = "Enter Current & Voltage (e.g. Current: 15A, Voltage: 230V)";
+            return true;
+        }
         if (lower.Contains("voltage") || lower.Contains("voltages") || lower.Contains("v-dc") || lower.Contains("conv voltage"))
         {
             placeholder = "Enter Voltage (e.g. 230V, 48V, -48V)";
@@ -84,9 +89,12 @@
             int formId = 0;
             int.TryParse(formIdStr, out formId);
 
-            txtCompletedDate.Text = DateTime.Now.ToString("yyyy-MM-dd");
+            // Completed On is strictly today's date (cannot choose past or future days)
+            txtCompletedDate.Text = DateTime.Today.ToString("yyyy-MM-dd");
+            calCompleted.SelectedDate = DateTime.Today;
+            calCompleted.VisibleDate = DateTime.Today;
 
-            string defaultBackUrl = "NewTaskDetails.aspx";
+            string defaultBackUrl = "NewToDo.aspx";
             List<string> defaultParams = new List<string>();
             if (!string.IsNullOrEmpty(lea) && lea != "N/A")
             {
@@ -231,7 +239,12 @@
                         {
                             lblFrequency.Text = dt.Rows[0]["Frequency"].ToString();
                         }
-                        if (dt.Rows[0]["Scheduled_Date"] != DBNull.Value)
+                        DateTime targetDate;
+                        if (!string.IsNullOrEmpty(endDate) && DateTime.TryParse(endDate, out targetDate))
+                        {
+                            lblScheduledDate.Text = targetDate.ToString("yyyy-MM-dd");
+                        }
+                        else if (dt.Rows[0]["Scheduled_Date"] != DBNull.Value)
                         {
                             DateTime sd;
                             if (DateTime.TryParse(dt.Rows[0]["Scheduled_Date"].ToString(), out sd))
@@ -283,6 +296,33 @@
                                     string placeholder;
                                     bool isVal = CheckIsValueTask(subName, out placeholder);
 
+                                    // Parse existing measurement and remark from compiled rowRemark if present
+                                    string existingVal = "";
+                                    string existingRemark = "";
+                                    if (!string.IsNullOrEmpty(rowRemark))
+                                    {
+                                        string[] remParts = rowRemark.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+                                        foreach (string rp in remParts)
+                                        {
+                                            string pTrim = rp.Trim();
+                                            if (pTrim.StartsWith(subName, StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                string afterName = pTrim.Substring(subName.Length).TrimStart(':', '-', ' ', '>');
+                                                int obsIdx = afterName.IndexOf("(Obs:", StringComparison.OrdinalIgnoreCase);
+                                                if (obsIdx >= 0)
+                                                {
+                                                    existingVal = afterName.Substring(0, obsIdx).Trim();
+                                                    existingRemark = afterName.Substring(obsIdx + 5).Trim().TrimEnd(')');
+                                                }
+                                                else
+                                                {
+                                                    existingVal = afterName.Trim();
+                                                }
+                                                break;
+                                            }
+                                        }
+                                    }
+
                                     subTaskList.Add(new SubTaskItem
                                     {
                                         FormId = formId,
@@ -292,9 +332,9 @@
                                         Frequency = freq,
                                         IsValueTask = isVal,
                                         ValuePlaceholder = placeholder,
-                                        MeasuredValue = "",
+                                        MeasuredValue = existingVal,
                                         Status = rowStatus,
-                                        Remark = ""
+                                        Remark = existingRemark
                                     });
                                 }
                             }
@@ -311,6 +351,22 @@
                                 string placeholder;
                                 bool isVal = CheckIsValueTask(subName, out placeholder);
 
+                                string existingVal = "";
+                                string existingRemark = "";
+                                if (!string.IsNullOrEmpty(rowRemark))
+                                {
+                                    int obsIdx = rowRemark.IndexOf("(Obs:", StringComparison.OrdinalIgnoreCase);
+                                    if (obsIdx >= 0)
+                                    {
+                                        existingVal = rowRemark.Substring(0, obsIdx).Trim();
+                                        existingRemark = rowRemark.Substring(obsIdx + 5).Trim().TrimEnd(')');
+                                    }
+                                    else
+                                    {
+                                        existingVal = rowRemark.Trim();
+                                    }
+                                }
+
                                 subTaskList.Add(new SubTaskItem
                                 {
                                     FormId = formId,
@@ -320,9 +376,9 @@
                                     Frequency = freq,
                                     IsValueTask = isVal,
                                     ValuePlaceholder = placeholder,
-                                    MeasuredValue = "",
+                                    MeasuredValue = existingVal,
                                     Status = rowStatus,
-                                    Remark = ""
+                                    Remark = existingRemark
                                 });
                             }
                         }
@@ -360,6 +416,10 @@
                 {
                     txtVal.Attributes["placeholder"] = item.ValuePlaceholder;
                 }
+                if (!string.IsNullOrEmpty(item.MeasuredValue))
+                {
+                    txtVal.Text = item.MeasuredValue;
+                }
             }
             else
             {
@@ -382,19 +442,20 @@
                     ddl.SelectedValue = "No";
                 }
             }
+
+            TextBox txtRem = (TextBox)e.Item.FindControl("txtRemark");
+            if (txtRem != null && !string.IsNullOrEmpty(item.Remark))
+            {
+                txtRem.Text = item.Remark;
+            }
         }
     }
 
     protected void btnSubmit_Click(object sender, EventArgs e)
     {
-        DateTime completedDate;
-        if (!DateTime.TryParse(txtCompletedDate.Text.Trim(), out completedDate))
-        {
-            lblMessage.Text = "Error: Please enter a valid Completed Date.";
-            lblMessage.ForeColor = System.Drawing.Color.Red;
-            lblMessage.Visible = true;
-            return;
-        }
+        // Enforce that completion date is strictly today's date (cannot choose past or future days)
+        DateTime completedDate = DateTime.Today;
+        txtCompletedDate.Text = DateTime.Today.ToString("yyyy-MM-dd");
 
         string nodeName = lblNodeName.Text.Trim();
         string updatedBy = Session["serviceno"] != null ? Session["serviceno"].ToString() : "Admin";
@@ -429,17 +490,18 @@
                 if (isVal && txtMeasuredValue != null)
                 {
                     string val = txtMeasuredValue.Text.Trim();
-                    recordDetail = subName + ": " + (string.IsNullOrEmpty(val) ? "Not Recorded" : val);
+                    recordDetail = subName + ": " + (string.IsNullOrEmpty(val) ? "Completed" : val);
                     if (!string.IsNullOrEmpty(remark))
                     {
                         recordDetail += " (Obs: " + remark + ")";
                     }
-                    itemStatus = string.IsNullOrEmpty(val) ? "Pending" : "Completed";
+                    itemStatus = "Completed";
                 }
                 else if (ddlStatus != null)
                 {
-                    itemStatus = ddlStatus.SelectedValue;
-                    recordDetail = subName + " -> Status: " + itemStatus;
+                    string sel = ddlStatus.SelectedValue;
+                    itemStatus = (sel == "No") ? "Pending" : "Completed";
+                    recordDetail = subName + " -> Status: " + sel;
                     if (!string.IsNullOrEmpty(remark))
                     {
                         recordDetail += " (Obs: " + remark + ")";
@@ -476,32 +538,153 @@
                 string compiledRemark = string.Join(" | ", kvp.Value);
                 string status = finalStatusByFullTask[fullTask];
 
-                string updateSql = @"
+                // Fetch metadata for this task (Sc_ID, Platform, Frequency)
+                int scId = formId;
+                string platform = "";
+                string taskFreq = "";
+                using (SqlCommand cmdInfo = new SqlCommand("SELECT Sc_ID, Platform, Frequency FROM dbo.FormData_V2 WHERE ID = @ID", conn))
+                {
+                    cmdInfo.Parameters.AddWithValue("@ID", formId);
+                    using (SqlDataReader rInfo = cmdInfo.ExecuteReader())
+                    {
+                        if (rInfo.Read())
+                        {
+                            scId = rInfo["Sc_ID"] != DBNull.Value ? Convert.ToInt32(rInfo["Sc_ID"]) : formId;
+                            platform = rInfo["Platform"] != DBNull.Value ? rInfo["Platform"].ToString() : "";
+                            taskFreq = rInfo["Frequency"] != DBNull.Value ? rInfo["Frequency"].ToString() : "";
+                        }
+                    }
+                }
+
+                bool isDaily = string.Equals(taskFreq, "Daily", StringComparison.OrdinalIgnoreCase) || 
+                               string.Equals(lblFrequency.Text.Trim(), "Daily", StringComparison.OrdinalIgnoreCase);
+
+                DateTime scheduledDate = completedDate.Date; // e.g. 09.09.2026 00:00
+                DateTime endDateForDb = isDaily ? completedDate.Date.AddHours(23).AddMinutes(59) : completedDate.Date.AddHours(23).AddMinutes(59); // e.g. 09.09.2026 23:59
+
+                // 1. DIRECTLY UPDATE the task record in dbo.FormData_V2
+                string updateTaskSql = @"
                     UPDATE dbo.FormData_V2 
                     SET Status = @Status,
                         Remark = @Remark,
                         Completed_on = @Completed_on,
+                        Scheduled_Date = @Scheduled_Date,
+                        End_Date = @End_Date,
                         Updated_on = GETDATE(),
                         Updated_by = @Updated_by
-                    WHERE Node_Name = @Node_Name AND (ID = @ID OR Maintenance_Task = @FullTaskName)";
+                    WHERE ID = @ID OR (Node_Name = @Node_Name AND Maintenance_Task = @FullTaskName AND Frequency = @Frequency)";
 
-                using (SqlCommand cmd = new SqlCommand(updateSql, conn))
+                using (SqlCommand cmd = new SqlCommand(updateTaskSql, conn))
                 {
                     cmd.Parameters.AddWithValue("@Status", status);
                     cmd.Parameters.AddWithValue("@Remark", compiledRemark);
                     cmd.Parameters.AddWithValue("@Completed_on", completedDate);
+                    cmd.Parameters.AddWithValue("@Scheduled_Date", scheduledDate);
+                    cmd.Parameters.AddWithValue("@End_Date", endDateForDb);
                     cmd.Parameters.AddWithValue("@Updated_by", updatedBy);
-                    cmd.Parameters.AddWithValue("@Node_Name", nodeName);
                     cmd.Parameters.AddWithValue("@ID", formId);
+                    cmd.Parameters.AddWithValue("@Node_Name", nodeName);
                     cmd.Parameters.AddWithValue("@FullTaskName", fullTask);
-
+                    cmd.Parameters.AddWithValue("@Frequency", isDaily ? "Daily" : taskFreq);
                     int rows = cmd.ExecuteNonQuery();
                     updatedCount += rows;
+                }
+
+                // 2. DIRECTLY UPDATE dbo.Schedule_V2 with observation remarks and matching Start_Date / End_Date
+                string updateScheduleSql = @"
+                    UPDATE dbo.Schedule_V2 
+                    SET Remark = @Remark,
+                        Start_Date = @Scheduled_Date,
+                        End_Date = @End_Date
+                    WHERE ID = @Sc_ID OR (Node_Name = @Node_Name AND Task = @FullTaskName)";
+
+                using (SqlCommand cmdSch = new SqlCommand(updateScheduleSql, conn))
+                {
+                    cmdSch.Parameters.AddWithValue("@Remark", compiledRemark);
+                    cmdSch.Parameters.AddWithValue("@Scheduled_Date", scheduledDate);
+                    cmdSch.Parameters.AddWithValue("@End_Date", endDateForDb);
+                    cmdSch.Parameters.AddWithValue("@Sc_ID", scId);
+                    cmdSch.Parameters.AddWithValue("@Node_Name", nodeName);
+                    cmdSch.Parameters.AddWithValue("@FullTaskName", fullTask);
+                    cmdSch.ExecuteNonQuery();
+                }
+
+                // 3. For Daily tasks: Also maintain daily historical log record in dbo.FormData_V2
+                if (isDaily)
+                {
+                    int existingCompletedId = 0;
+                    string checkSql = @"
+                        SELECT TOP 1 ID FROM dbo.FormData_V2 
+                        WHERE Sc_ID = @Sc_ID 
+                          AND ID <> @FormID
+                          AND Status IN ('Closed', 'Completed', 'Close') 
+                          AND CAST(Completed_on AS date) = @CompletedDate";
+
+                    using (SqlCommand cmdCheck = new SqlCommand(checkSql, conn))
+                    {
+                        cmdCheck.Parameters.AddWithValue("@Sc_ID", scId);
+                        cmdCheck.Parameters.AddWithValue("@FormID", formId);
+                        cmdCheck.Parameters.AddWithValue("@CompletedDate", completedDate.Date);
+                        object res = cmdCheck.ExecuteScalar();
+                        if (res != null && res != DBNull.Value)
+                        {
+                            existingCompletedId = Convert.ToInt32(res);
+                        }
+                    }
+
+                    if (existingCompletedId > 0)
+                    {
+                        string updateLogSql = @"
+                            UPDATE dbo.FormData_V2 
+                            SET Status = @Status,
+                                Remark = @Remark,
+                                Scheduled_Date = @Scheduled_Date,
+                                End_Date = @End_Date,
+                                Completed_on = @Completed_on,
+                                Updated_on = GETDATE(),
+                                Updated_by = @Updated_by
+                            WHERE ID = @ID";
+
+                        using (SqlCommand cmdLog = new SqlCommand(updateLogSql, conn))
+                        {
+                            cmdLog.Parameters.AddWithValue("@Status", status);
+                            cmdLog.Parameters.AddWithValue("@Remark", compiledRemark);
+                            cmdLog.Parameters.AddWithValue("@Scheduled_Date", scheduledDate);
+                            cmdLog.Parameters.AddWithValue("@End_Date", endDateForDb);
+                            cmdLog.Parameters.AddWithValue("@Completed_on", completedDate);
+                            cmdLog.Parameters.AddWithValue("@Updated_by", updatedBy);
+                            cmdLog.Parameters.AddWithValue("@ID", existingCompletedId);
+                            cmdLog.ExecuteNonQuery();
+                        }
+                    }
+                    else if (formId <= 258)
+                    {
+                        string insertLogSql = @"
+                            INSERT INTO dbo.FormData_V2 
+                            (Sc_ID, Node_Name, Platform, Maintenance_Task, Frequency, Status, Remark, Scheduled_Date, End_Date, Completed_on, Updated_on, Updated_by)
+                            VALUES 
+                            (@Sc_ID, @Node_Name, @Platform, @FullTaskName, 'Daily', @Status, @Remark, @Scheduled_Date, @End_Date, @Completed_on, GETDATE(), @Updated_by)";
+
+                        using (SqlCommand cmdIns = new SqlCommand(insertLogSql, conn))
+                        {
+                            cmdIns.Parameters.AddWithValue("@Sc_ID", scId);
+                            cmdIns.Parameters.AddWithValue("@Node_Name", nodeName);
+                            cmdIns.Parameters.AddWithValue("@Platform", platform);
+                            cmdIns.Parameters.AddWithValue("@FullTaskName", fullTask);
+                            cmdIns.Parameters.AddWithValue("@Status", status);
+                            cmdIns.Parameters.AddWithValue("@Remark", compiledRemark);
+                            cmdIns.Parameters.AddWithValue("@Scheduled_Date", scheduledDate);
+                            cmdIns.Parameters.AddWithValue("@End_Date", endDateForDb);
+                            cmdIns.Parameters.AddWithValue("@Completed_on", completedDate);
+                            cmdIns.Parameters.AddWithValue("@Updated_by", updatedBy);
+                            cmdIns.ExecuteNonQuery();
+                        }
+                    }
                 }
             }
         }
 
-        lblMessage.Text = "Successfully saved and updated " + updatedCount + " record(s) and their measurements!";
+        lblMessage.Text = "Successfully saved and submitted " + updatedCount + " record(s) and their measurements! <a href='NewToDo.aspx' style='color:#059669;font-weight:bold;margin-left:12px;text-decoration:underline;'>&laquo; Return to Dashboard</a> | <a href='closedtask.aspx?type=daily' style='color:#0284c7;font-weight:bold;margin-left:8px;text-decoration:underline;'>View in Completed Tasks &raquo;</a>";
         lblMessage.ForeColor = System.Drawing.Color.Green;
         lblMessage.Visible = true;
     }
@@ -509,11 +692,49 @@
     protected void ImageButton1_Click(object sender, ImageClickEventArgs e)
     {
         calCompleted.Visible = !calCompleted.Visible;
+        if (calCompleted.Visible)
+        {
+            calCompleted.VisibleDate = DateTime.Today;
+            calCompleted.SelectedDate = DateTime.Today;
+        }
+    }
+
+    protected void calCompleted_DayRender(object sender, DayRenderEventArgs e)
+    {
+        // Enforce same day only: disable all past and future days
+        if (e.Day.Date != DateTime.Today)
+        {
+            e.Day.IsSelectable = false;
+            e.Cell.ForeColor = System.Drawing.ColorTranslator.FromHtml("#94a3b8");
+            e.Cell.BackColor = System.Drawing.ColorTranslator.FromHtml("#f8fafc");
+            e.Cell.ToolTip = "Completion date can only be today (" + DateTime.Today.ToString("yyyy-MM-dd") + ")";
+            e.Cell.Attributes.Add("style", "cursor: not-allowed; opacity: 0.45; pointer-events: none;");
+        }
+        else
+        {
+            e.Day.IsSelectable = true;
+            e.Cell.Font.Bold = true;
+            e.Cell.BackColor = System.Drawing.ColorTranslator.FromHtml("#dcfce7");
+            e.Cell.ForeColor = System.Drawing.ColorTranslator.FromHtml("#166534");
+            e.Cell.ToolTip = "Today: " + DateTime.Today.ToString("yyyy-MM-dd");
+            e.Cell.Attributes.Add("style", "cursor: pointer; font-weight: bold; border: 2px solid #16a34a;");
+        }
     }
 
     protected void calCompleted_SelectionChanged(object sender, EventArgs e)
     {
-        txtCompletedDate.Text = calCompleted.SelectedDate.ToString("yyyy-MM-dd");
+        // Strictly lock to today even if selection event fires
+        txtCompletedDate.Text = DateTime.Today.ToString("yyyy-MM-dd");
+        if (calCompleted.SelectedDate.Date != DateTime.Today)
+        {
+            lblMessage.Text = "Notice: Completion date must be today (" + DateTime.Today.ToString("yyyy-MM-dd") + "). Future and past days cannot be selected.";
+            lblMessage.ForeColor = System.Drawing.Color.Red;
+            lblMessage.Visible = true;
+        }
+        else
+        {
+            lblMessage.Visible = false;
+        }
         calCompleted.Visible = false;
     }
 </script>
@@ -696,23 +917,27 @@
                 </tr>
             </table>
 
-            <div style="margin: 15px 0;">
+            <div style="margin: 15px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
                 <span style="font-weight: bold; color: #000066; font-size: 14px;">Completed On: </span>
-                <span style="color: #666; font-size: 12px; margin-right: 8px;">Start_Date</span>
-                <asp:TextBox ID="txtCompletedDate" runat="server" Width="140px" style="padding: 4px 8px; font-size: 13px;"></asp:TextBox>
-                <asp:ImageButton ID="ImageButton1" runat="server" Height="22px" ImageUrl="~/image/calendar.png" OnClick="ImageButton1_Click" Width="24px" style="vertical-align: middle; margin-left: 4px;" />
-                <br />
+                <asp:TextBox ID="txtCompletedDate" runat="server" Width="130px" ReadOnly="true" 
+                    style="padding: 5px 10px; font-size: 13px; font-weight: 600; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; color: #1e293b; cursor: not-allowed;" 
+                    onkeydown="return false;"></asp:TextBox>
+                <asp:ImageButton ID="ImageButton1" runat="server" Height="22px" ImageUrl="~/image/calendar.png" OnClick="ImageButton1_Click" Width="24px" style="vertical-align: middle; cursor: pointer;" ToolTip="Completion date must be today only" />
+                <span style="display: inline-flex; align-items: center; background-color: #ecfdf5; color: #065f46; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 10px; border: 1px solid #a7f3d0;">
+                    Today Only (Locked)
+                </span>
+                <div style="width: 100%;"></div>
                 <asp:Calendar ID="calCompleted" runat="server" BackColor="White" BorderColor="#3366CC" BorderWidth="1px" 
                     CellPadding="1" DayNameFormat="Shortest" Font-Names="Verdana" Font-Size="8pt" ForeColor="#003399" 
-                    Height="180px" OnSelectionChanged="calCompleted_SelectionChanged" Visible="False" Width="220px" style="margin-top: 8px;">
+                    Height="180px" ShowNextPrevMonth="False" OnDayRender="calCompleted_DayRender" OnSelectionChanged="calCompleted_SelectionChanged" Visible="False" Width="220px" style="margin-top: 4px;">
                     <DayHeaderStyle BackColor="#99CCCC" ForeColor="#336666" Height="1px" />
                     <NextPrevStyle Font-Size="8pt" ForeColor="#CCCCFF" />
-                    <OtherMonthDayStyle ForeColor="#999999" />
-                    <SelectedDayStyle BackColor="#009999" Font-Bold="True" ForeColor="#CCFF99" />
+                    <OtherMonthDayStyle ForeColor="#cbd5e1" />
+                    <SelectedDayStyle BackColor="#16a34a" Font-Bold="True" ForeColor="#ffffff" />
                     <SelectorStyle BackColor="#99CCCC" ForeColor="#336666" />
                     <TitleStyle BackColor="#003399" BorderColor="#3366CC" BorderWidth="1px" Font-Bold="True" Font-Size="10pt" ForeColor="#CCCCFF" Height="25px" />
-                    <TodayDayStyle BackColor="#99CCCC" ForeColor="White" />
-                    <WeekendDayStyle BackColor="#CCCCFF" />
+                    <TodayDayStyle BackColor="#dcfce7" ForeColor="#166534" Font-Bold="True" />
+                    <WeekendDayStyle BackColor="#f8fafc" ForeColor="#94a3b8" />
                 </asp:Calendar>
             </div>
 
