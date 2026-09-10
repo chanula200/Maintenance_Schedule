@@ -19,6 +19,19 @@
         public string MeasuredValue { get; set; }
         public string Status { get; set; }
         public string Remark { get; set; }
+        public bool CanUploadPhoto { get; set; }
+        public bool HasExistingPicture { get; set; }
+    }
+
+    private static bool CheckCanUploadPhoto(string taskName)
+    {
+        if (string.IsNullOrWhiteSpace(taskName)) return false;
+        string lower = taskName.ToLowerInvariant();
+        return lower.Contains("filter") || 
+               lower.Contains("cleaning") || 
+               lower.Contains("clean") || 
+               lower.Contains("picture") || 
+               lower.Contains("photo");
     }
 
     private static bool CheckIsValueTask(string taskName, out string placeholder)
@@ -61,6 +74,67 @@
         }
         placeholder = "";
         return false;
+    }
+
+    private static List<string> SplitTasks(string rawTask)
+    {
+        List<string> result = new List<string>();
+        if (string.IsNullOrWhiteSpace(rawTask))
+        {
+            return result;
+        }
+
+        string raw = rawTask.Trim();
+
+        // 1. Pipe-separated
+        if (raw.Contains("|"))
+        {
+            string[] parts = raw.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string p in parts)
+            {
+                if (!string.IsNullOrWhiteSpace(p))
+                {
+                    result.Add(p.Trim());
+                }
+            }
+            if (result.Count > 1) return result;
+            result.Clear();
+        }
+
+        // 2. Newline-separated
+        if (raw.Contains("\n") || raw.Contains("\r"))
+        {
+            string[] parts = raw.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string p in parts)
+            {
+                if (!string.IsNullOrWhiteSpace(p))
+                {
+                    result.Add(p.Trim());
+                }
+            }
+            if (result.Count > 1) return result;
+            result.Clear();
+        }
+
+        // 3. Inline numbered tasks (e.g., "1. Task A 2. Task B 3. Task C" or "1) Task A 2) Task B")
+        if (System.Text.RegularExpressions.Regex.IsMatch(raw, @"(?:^|\s+)1[\.\)]") &&
+            System.Text.RegularExpressions.Regex.IsMatch(raw, @"(?:^|\s+)2[\.\)]"))
+        {
+            string[] parts = System.Text.RegularExpressions.Regex.Split(raw, @"(?<=\S)\s+(?=\d+[\.\)])");
+            foreach (string p in parts)
+            {
+                if (!string.IsNullOrWhiteSpace(p))
+                {
+                    result.Add(p.Trim());
+                }
+            }
+            if (result.Count > 1) return result;
+            result.Clear();
+        }
+
+        // Fallback: single task
+        result.Add(raw);
+        return result;
     }
 
     protected void Page_Load(object sender, EventArgs e)
@@ -128,75 +202,105 @@
             {
                 sql = @"
                     SELECT 
-                        f.ID,
-                        f.Sc_ID,
-                        f.Node_Name,
-                        COALESCE(f.Platform, s.Platform) AS Platform,
-                        f.Maintenance_Task,
-                        COALESCE(f.Frequency, s.Frequency) AS Frequency,
-                        f.Status,
+                        s.ID,
+                        s.ID AS Sc_ID,
+                        s.Node_Name,
+                        s.Platform,
+                        s.Task AS Maintenance_Task,
+                        CASE 
+                            WHEN s.Remark = 'Daily' OR DATEDIFF(day, s.Start_Date, s.End_Date) <= 2 THEN 'Daily'
+                            WHEN s.Remark = 'Weekly' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 6 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 8) THEN 'Weekly'
+                            WHEN s.Remark = 'Monthly' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 25 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 32) THEN 'Monthly'
+                            WHEN s.Remark = 'Every two months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 50 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 65) THEN 'Bi-Monthly'
+                            WHEN s.Remark = 'Every three months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 80 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 95) THEN 'Quarterly'
+                            WHEN s.Remark = 'Every six months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 170 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 190) THEN 'Half-Yearly'
+                            WHEN s.Remark = 'Once a year' OR DATEDIFF(day, s.Start_Date, s.End_Date) >= 350 THEN 'Annually'
+                            ELSE ISNULL(NULLIF(s.Remark, ''), 'Periodic')
+                        END AS Frequency,
+                        COALESCE(f.Status, 'Pending') AS Status,
                         f.Remark,
-                        f.Scheduled_Date,
-                        f.End_Date,
-                        f.Completed_on,
-                        COALESCE(l.LEA_Name, s.LEA, 'N/A') AS LEA_Name
-                    FROM dbo.FormData_V2 f
-                    LEFT JOIN dbo.Schedule_V2 s ON f.Sc_ID = s.ID
+                        s.Start_Date AS Scheduled_Date,
+                        s.End_Date,
+                        f.Completed_On,
+                        CASE WHEN f.Pictures IS NOT NULL AND DATALENGTH(f.Pictures) > 0 THEN 1 ELSE 0 END AS HasPicture,
+                        COALESCE(NULLIF(NULLIF(l.LEA_Name, 'NULL'), ''), s.LEA, 'N/A') AS LEA_Name
+                    FROM dbo.Schedule_V3 s
                     LEFT JOIN dbo.Lea2 l ON s.LEA = l.LEA
-                    WHERE f.ID = @Form_ID";
+                    LEFT JOIN dbo.Formdata_V3 f ON s.ID = f.Sc_ID
+                    WHERE s.ID = @Form_ID";
             }
             else if (!string.IsNullOrEmpty(frequency))
             {
                 sql = @"
                     SELECT 
-                        f.ID,
-                        f.Sc_ID,
-                        f.Node_Name,
-                        COALESCE(f.Platform, s.Platform) AS Platform,
-                        f.Maintenance_Task,
-                        COALESCE(f.Frequency, s.Frequency) AS Frequency,
-                        f.Status,
+                        s.ID,
+                        s.ID AS Sc_ID,
+                        s.Node_Name,
+                        s.Platform,
+                        s.Task AS Maintenance_Task,
+                        CASE 
+                            WHEN s.Remark = 'Daily' OR DATEDIFF(day, s.Start_Date, s.End_Date) <= 2 THEN 'Daily'
+                            WHEN s.Remark = 'Weekly' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 6 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 8) THEN 'Weekly'
+                            WHEN s.Remark = 'Monthly' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 25 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 32) THEN 'Monthly'
+                            WHEN s.Remark = 'Every two months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 50 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 65) THEN 'Bi-Monthly'
+                            WHEN s.Remark = 'Every three months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 80 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 95) THEN 'Quarterly'
+                            WHEN s.Remark = 'Every six months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 170 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 190) THEN 'Half-Yearly'
+                            WHEN s.Remark = 'Once a year' OR DATEDIFF(day, s.Start_Date, s.End_Date) >= 350 THEN 'Annually'
+                            ELSE ISNULL(NULLIF(s.Remark, ''), 'Periodic')
+                        END AS Frequency,
+                        COALESCE(f.Status, 'Pending') AS Status,
                         f.Remark,
-                        f.Scheduled_Date,
-                        f.End_Date,
-                        f.Completed_on,
-                        COALESCE(l.LEA_Name, s.LEA, 'N/A') AS LEA_Name
-                    FROM dbo.FormData_V2 f
-                    LEFT JOIN dbo.Schedule_V2 s ON f.Sc_ID = s.ID
+                        s.Start_Date AS Scheduled_Date,
+                        s.End_Date,
+                        f.Completed_On,
+                        CASE WHEN f.Pictures IS NOT NULL AND DATALENGTH(f.Pictures) > 0 THEN 1 ELSE 0 END AS HasPicture,
+                        COALESCE(NULLIF(NULLIF(l.LEA_Name, 'NULL'), ''), s.LEA, 'N/A') AS LEA_Name
+                    FROM dbo.Schedule_V3 s
                     LEFT JOIN dbo.Lea2 l ON s.LEA = l.LEA
-                    WHERE f.Node_Name = @Node_Name
-                      AND (COALESCE(f.Frequency, s.Frequency) = @Frequency)
-                      AND (@Platform = '' OR COALESCE(f.Platform, s.Platform) = @Platform)
-                      AND (@LEA_Name = '' OR COALESCE(l.LEA_Name, s.LEA) = @LEA_Name)
-                    ORDER BY f.ID ASC";
+                    LEFT JOIN dbo.Formdata_V3 f ON s.ID = f.Sc_ID
+                    WHERE s.Node_Name = @Node_Name
+                      AND (@Platform = '' OR s.Platform = @Platform)
+                      AND (@LEA_Name = '' OR COALESCE(NULLIF(NULLIF(l.LEA_Name, 'NULL'), ''), s.LEA) = @LEA_Name OR s.LEA = @LEA_Name)
+                      AND (
+                          @Frequency = ''
+                          OR s.Remark = @Frequency
+                          OR (@Frequency = 'Daily' AND (s.Remark = 'Daily' OR DATEDIFF(day, s.Start_Date, s.End_Date) <= 2))
+                      )
+                    ORDER BY s.ID ASC";
             }
             else
             {
-                // Fallback: select only the first/earliest active task for this node to avoid dumping all schedules together
                 sql = @"
-                    WITH RankedTasks AS (
-                        SELECT 
-                            f.ID,
-                            f.Sc_ID,
-                            f.Node_Name,
-                            COALESCE(f.Platform, s.Platform) AS Platform,
-                            f.Maintenance_Task,
-                            COALESCE(f.Frequency, s.Frequency) AS Frequency,
-                            f.Status,
-                            f.Remark,
-                            f.Scheduled_Date,
-                            f.End_Date,
-                            f.Completed_on,
-                            COALESCE(l.LEA_Name, s.LEA, 'N/A') AS LEA_Name,
-                            DENSE_RANK() OVER (ORDER BY f.Sc_ID ASC, f.ID ASC) as TaskRank
-                        FROM dbo.FormData_V2 f
-                        LEFT JOIN dbo.Schedule_V2 s ON f.Sc_ID = s.ID
-                        LEFT JOIN dbo.Lea2 l ON s.LEA = l.LEA
-                        WHERE f.Node_Name = @Node_Name
-                          AND (@Platform = '' OR COALESCE(f.Platform, s.Platform) = @Platform)
-                          AND (@LEA_Name = '' OR COALESCE(l.LEA_Name, s.LEA) = @LEA_Name)
-                    )
-                    SELECT * FROM RankedTasks WHERE TaskRank = 1";
+                    SELECT 
+                        s.ID,
+                        s.ID AS Sc_ID,
+                        s.Node_Name,
+                        s.Platform,
+                        s.Task AS Maintenance_Task,
+                        CASE 
+                            WHEN s.Remark = 'Daily' OR DATEDIFF(day, s.Start_Date, s.End_Date) <= 2 THEN 'Daily'
+                            WHEN s.Remark = 'Weekly' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 6 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 8) THEN 'Weekly'
+                            WHEN s.Remark = 'Monthly' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 25 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 32) THEN 'Monthly'
+                            WHEN s.Remark = 'Every two months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 50 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 65) THEN 'Bi-Monthly'
+                            WHEN s.Remark = 'Every three months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 80 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 95) THEN 'Quarterly'
+                            WHEN s.Remark = 'Every six months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 170 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 190) THEN 'Half-Yearly'
+                            WHEN s.Remark = 'Once a year' OR DATEDIFF(day, s.Start_Date, s.End_Date) >= 350 THEN 'Annually'
+                            ELSE ISNULL(NULLIF(s.Remark, ''), 'Periodic')
+                        END AS Frequency,
+                        COALESCE(f.Status, 'Pending') AS Status,
+                        f.Remark,
+                        s.Start_Date AS Scheduled_Date,
+                        s.End_Date,
+                        f.Completed_On,
+                        CASE WHEN f.Pictures IS NOT NULL AND DATALENGTH(f.Pictures) > 0 THEN 1 ELSE 0 END AS HasPicture,
+                        COALESCE(NULLIF(NULLIF(l.LEA_Name, 'NULL'), ''), s.LEA, 'N/A') AS LEA_Name
+                    FROM dbo.Schedule_V3 s
+                    LEFT JOIN dbo.Lea2 l ON s.LEA = l.LEA
+                    LEFT JOIN dbo.Formdata_V3 f ON s.ID = f.Sc_ID
+                    WHERE s.Node_Name = @Node_Name
+                      AND (@Platform = '' OR s.Platform = @Platform)
+                      AND (@LEA_Name = '' OR COALESCE(NULLIF(NULLIF(l.LEA_Name, 'NULL'), ''), s.LEA) = @LEA_Name OR s.LEA = @LEA_Name)
+                    ORDER BY s.ID ASC";
             }
 
             using (SqlCommand cmd = new SqlCommand(sql, conn))
@@ -279,69 +383,13 @@
                             string freq = row["Frequency"] != DBNull.Value ? row["Frequency"].ToString().Trim() : "";
                             string rowStatus = row["Status"] != DBNull.Value ? row["Status"].ToString().Trim() : "Pending";
                             string rowRemark = row["Remark"] != DBNull.Value ? row["Remark"].ToString().Trim() : "";
+                            bool hasPic = row.Table.Columns.Contains("HasPicture") && row["HasPicture"] != DBNull.Value && Convert.ToInt32(row["HasPicture"]) == 1;
 
-                            if (rawTask.Contains("|"))
+                            List<string> subTasks = SplitTasks(rawTask);
+                            for (int i = 0; i < subTasks.Count; i++)
                             {
-                                string[] parts = rawTask.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
-                                for (int i = 0; i < parts.Length; i++)
-                                {
-                                    string subName = parts[i].Trim();
-                                    // Deduplicate identical subtasks
-                                    if (seenSubTasks.Contains(subName))
-                                    {
-                                        continue;
-                                    }
-                                    seenSubTasks.Add(subName);
-
-                                    string placeholder;
-                                    bool isVal = CheckIsValueTask(subName, out placeholder);
-
-                                    // Parse existing measurement and remark from compiled rowRemark if present
-                                    string existingVal = "";
-                                    string existingRemark = "";
-                                    if (!string.IsNullOrEmpty(rowRemark))
-                                    {
-                                        string[] remParts = rowRemark.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
-                                        foreach (string rp in remParts)
-                                        {
-                                            string pTrim = rp.Trim();
-                                            if (pTrim.StartsWith(subName, StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                string afterName = pTrim.Substring(subName.Length).TrimStart(':', '-', ' ', '>');
-                                                int obsIdx = afterName.IndexOf("(Obs:", StringComparison.OrdinalIgnoreCase);
-                                                if (obsIdx >= 0)
-                                                {
-                                                    existingVal = afterName.Substring(0, obsIdx).Trim();
-                                                    existingRemark = afterName.Substring(obsIdx + 5).Trim().TrimEnd(')');
-                                                }
-                                                else
-                                                {
-                                                    existingVal = afterName.Trim();
-                                                }
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    subTaskList.Add(new SubTaskItem
-                                    {
-                                        FormId = formId,
-                                        SubIndex = i,
-                                        FullTaskName = rawTask,
-                                        SubTaskName = subName,
-                                        Frequency = freq,
-                                        IsValueTask = isVal,
-                                        ValuePlaceholder = placeholder,
-                                        MeasuredValue = existingVal,
-                                        Status = rowStatus,
-                                        Remark = existingRemark
-                                    });
-                                }
-                            }
-                            else
-                            {
-                                string subName = rawTask;
-                                // Deduplicate identical tasks
+                                string subName = subTasks[i];
+                                // Deduplicate identical subtasks within this form view
                                 if (seenSubTasks.Contains(subName))
                                 {
                                     continue;
@@ -350,27 +398,54 @@
 
                                 string placeholder;
                                 bool isVal = CheckIsValueTask(subName, out placeholder);
+                                bool canPhoto = CheckCanUploadPhoto(subName) || CheckCanUploadPhoto(rawTask);
 
+                                // Parse existing measurement and remark from compiled rowRemark if present
                                 string existingVal = "";
                                 string existingRemark = "";
                                 if (!string.IsNullOrEmpty(rowRemark))
                                 {
-                                    int obsIdx = rowRemark.IndexOf("(Obs:", StringComparison.OrdinalIgnoreCase);
-                                    if (obsIdx >= 0)
+                                    string[] remParts = rowRemark.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+                                    foreach (string rp in remParts)
                                     {
-                                        existingVal = rowRemark.Substring(0, obsIdx).Trim();
-                                        existingRemark = rowRemark.Substring(obsIdx + 5).Trim().TrimEnd(')');
+                                        string pTrim = rp.Trim();
+                                        if (pTrim.StartsWith(subName, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            string afterName = pTrim.Substring(subName.Length).TrimStart(':', '-', ' ', '>');
+                                            int obsIdx = afterName.IndexOf("(Obs:", StringComparison.OrdinalIgnoreCase);
+                                            if (obsIdx >= 0)
+                                            {
+                                                existingVal = afterName.Substring(0, obsIdx).Trim();
+                                                existingRemark = afterName.Substring(obsIdx + 5).Trim().TrimEnd(')');
+                                            }
+                                            else
+                                            {
+                                                existingVal = afterName.Trim();
+                                            }
+                                            break;
+                                        }
                                     }
-                                    else
+
+                                    // Fallback for single task without prefix
+                                    if (subTasks.Count == 1 && string.IsNullOrEmpty(existingVal) && string.IsNullOrEmpty(existingRemark))
                                     {
-                                        existingVal = rowRemark.Trim();
+                                        int obsIdx = rowRemark.IndexOf("(Obs:", StringComparison.OrdinalIgnoreCase);
+                                        if (obsIdx >= 0)
+                                        {
+                                            existingVal = rowRemark.Substring(0, obsIdx).Trim();
+                                            existingRemark = rowRemark.Substring(obsIdx + 5).Trim().TrimEnd(')');
+                                        }
+                                        else
+                                        {
+                                            existingVal = rowRemark.Trim();
+                                        }
                                     }
                                 }
 
                                 subTaskList.Add(new SubTaskItem
                                 {
                                     FormId = formId,
-                                    SubIndex = 0,
+                                    SubIndex = i,
                                     FullTaskName = rawTask,
                                     SubTaskName = subName,
                                     Frequency = freq,
@@ -378,7 +453,9 @@
                                     ValuePlaceholder = placeholder,
                                     MeasuredValue = existingVal,
                                     Status = rowStatus,
-                                    Remark = existingRemark
+                                    Remark = existingRemark,
+                                    CanUploadPhoto = canPhoto,
+                                    HasExistingPicture = hasPic
                                 });
                             }
                         }
@@ -388,7 +465,7 @@
                     }
                     else
                     {
-                        lblError.Text = "No maintenance task records found in FormData_V2 for node '" + Server.HtmlEncode(nodeName) + "'.";
+                        lblError.Text = "No maintenance task records found in Formdata_V3 / Schedule_V3 for node '" + Server.HtmlEncode(nodeName) + "'.";
                         lblError.Visible = true;
                         pnlForm.Visible = false;
                     }
@@ -425,10 +502,21 @@
             {
                 pnlValue.Visible = false;
                 pnlDropdown.Visible = true;
-                if (!string.IsNullOrEmpty(item.Status))
+                if (!string.IsNullOrEmpty(item.MeasuredValue))
                 {
-                    string s = item.Status.Trim().ToLowerInvariant();
-                    if (s == "yes" || s == "completed" || s == "cleaned" || s == "good" || s == "closed")
+                    if (item.MeasuredValue.Equals("Yes", StringComparison.OrdinalIgnoreCase) || item.MeasuredValue.Contains("Yes"))
+                    {
+                        ddl.SelectedValue = "Yes";
+                    }
+                    else if (item.MeasuredValue.Equals("No", StringComparison.OrdinalIgnoreCase) || item.MeasuredValue.Contains("No"))
+                    {
+                        ddl.SelectedValue = "No";
+                    }
+                }
+                else if (!string.IsNullOrEmpty(item.Status))
+                {
+                    string st = item.Status.Trim();
+                    if (st == "Completed" || st == "Closed" || st == "Yes")
                     {
                         ddl.SelectedValue = "Yes";
                     }
@@ -436,10 +524,6 @@
                     {
                         ddl.SelectedValue = "No";
                     }
-                }
-                else
-                {
-                    ddl.SelectedValue = "No";
                 }
             }
 
@@ -453,49 +537,62 @@
 
     protected void btnSubmit_Click(object sender, EventArgs e)
     {
-        // Enforce that completion date is strictly today's date (cannot choose past or future days)
-        DateTime completedDate = DateTime.Today;
-        txtCompletedDate.Text = DateTime.Today.ToString("yyyy-MM-dd");
-
         string nodeName = lblNodeName.Text.Trim();
         string updatedBy = Session["serviceno"] != null ? Session["serviceno"].ToString() : "Admin";
         string connStr = ConfigurationManager.ConnectionStrings["PMSConnectionString"].ConnectionString;
 
-        // Group submitted subtasks by FullTaskName / FormId
+        DateTime completedDate = DateTime.Now;
+        if (!string.IsNullOrEmpty(txtCompletedDate.Text))
+        {
+            DateTime parsed;
+            if (DateTime.TryParse(txtCompletedDate.Text.Trim(), out parsed))
+            {
+                completedDate = parsed;
+            }
+        }
+
         Dictionary<string, List<string>> taskSummaryByFullTask = new Dictionary<string, List<string>>();
         Dictionary<string, string> finalStatusByFullTask = new Dictionary<string, string>();
         Dictionary<string, int> formIdByFullTask = new Dictionary<string, int>();
+        Dictionary<string, byte[]> pictureBytesByFullTask = new Dictionary<string, byte[]>();
 
         foreach (RepeaterItem item in rptTasks.Items)
         {
-            HiddenField hdnFormId = (HiddenField)item.FindControl("hdnFormId");
-            HiddenField hdnFullTaskName = (HiddenField)item.FindControl("hdnFullTaskName");
-            HiddenField hdnIsValue = (HiddenField)item.FindControl("hdnIsValue");
-            Label lblSubTaskName = (Label)item.FindControl("lblSubTaskName");
-            TextBox txtMeasuredValue = (TextBox)item.FindControl("txtMeasuredValue");
-            DropDownList ddlStatus = (DropDownList)item.FindControl("ddlStatus");
-            TextBox txtRemark = (TextBox)item.FindControl("txtRemark");
-
-            if (hdnFormId != null && hdnFullTaskName != null)
+            if (item.ItemType == ListItemType.Item || item.ItemType == ListItemType.AlternatingItem)
             {
+                HiddenField hdnFormId = (HiddenField)item.FindControl("hdnFormId");
+                HiddenField hdnFullTask = (HiddenField)item.FindControl("hdnFullTaskName");
+                HiddenField hdnSubTask = (HiddenField)item.FindControl("hdnSubTaskName");
+                HiddenField hdnIsValue = (HiddenField)item.FindControl("hdnIsValue");
+
+                TextBox txtVal = (TextBox)item.FindControl("txtMeasuredValue");
+                DropDownList ddlStatus = (DropDownList)item.FindControl("ddlStatus");
+                TextBox txtRemark = (TextBox)item.FindControl("txtRemark");
+                FileUpload fuPhoto = (FileUpload)item.FindControl("fuPhoto");
+
                 int formId = Convert.ToInt32(hdnFormId.Value);
-                string fullTask = hdnFullTaskName.Value;
-                bool isVal = hdnIsValue.Value == "True";
-                string subName = lblSubTaskName != null ? lblSubTaskName.Text : "Task";
+                string fullTask = hdnFullTask.Value;
+                string subName = hdnSubTask != null ? hdnSubTask.Value : "";
+                bool isVal = hdnIsValue != null ? Convert.ToBoolean(hdnIsValue.Value) : false;
                 string remark = txtRemark != null ? txtRemark.Text.Trim() : "";
 
-                string recordDetail = "";
-                string itemStatus = "Completed";
-
-                if (isVal && txtMeasuredValue != null)
+                if (fuPhoto != null && fuPhoto.HasFile && fuPhoto.FileBytes != null && fuPhoto.FileBytes.Length > 0)
                 {
-                    string val = txtMeasuredValue.Text.Trim();
-                    recordDetail = subName + ": " + (string.IsNullOrEmpty(val) ? "Completed" : val);
+                    pictureBytesByFullTask[fullTask] = fuPhoto.FileBytes;
+                }
+
+                string itemStatus = "Completed";
+                string recordDetail = "";
+
+                if (isVal && txtVal != null)
+                {
+                    string enteredVal = txtVal.Text.Trim();
+                    itemStatus = string.IsNullOrEmpty(enteredVal) ? "Pending" : "Completed";
+                    recordDetail = subName + ": " + (string.IsNullOrEmpty(enteredVal) ? "N/A" : enteredVal);
                     if (!string.IsNullOrEmpty(remark))
                     {
                         recordDetail += " (Obs: " + remark + ")";
                     }
-                    itemStatus = "Completed";
                 }
                 else if (ddlStatus != null)
                 {
@@ -537,21 +634,21 @@
                 int formId = formIdByFullTask[fullTask];
                 string compiledRemark = string.Join(" | ", kvp.Value);
                 string status = finalStatusByFullTask[fullTask];
+                byte[] picBytes = pictureBytesByFullTask.ContainsKey(fullTask) ? pictureBytesByFullTask[fullTask] : null;
 
-                // Fetch metadata for this task (Sc_ID, Platform, Frequency)
+                // Fetch metadata for this task (Platform, Frequency) from Schedule_V3
                 int scId = formId;
                 string platform = "";
                 string taskFreq = "";
-                using (SqlCommand cmdInfo = new SqlCommand("SELECT Sc_ID, Platform, Frequency FROM dbo.FormData_V2 WHERE ID = @ID", conn))
+                using (SqlCommand cmdInfo = new SqlCommand("SELECT Platform, Remark, Start_Date, End_Date FROM dbo.Schedule_V3 WHERE ID = @ID", conn))
                 {
                     cmdInfo.Parameters.AddWithValue("@ID", formId);
                     using (SqlDataReader rInfo = cmdInfo.ExecuteReader())
                     {
                         if (rInfo.Read())
                         {
-                            scId = rInfo["Sc_ID"] != DBNull.Value ? Convert.ToInt32(rInfo["Sc_ID"]) : formId;
                             platform = rInfo["Platform"] != DBNull.Value ? rInfo["Platform"].ToString() : "";
-                            taskFreq = rInfo["Frequency"] != DBNull.Value ? rInfo["Frequency"].ToString() : "";
+                            taskFreq = rInfo["Remark"] != DBNull.Value ? rInfo["Remark"].ToString() : "";
                         }
                     }
                 }
@@ -559,127 +656,65 @@
                 bool isDaily = string.Equals(taskFreq, "Daily", StringComparison.OrdinalIgnoreCase) || 
                                string.Equals(lblFrequency.Text.Trim(), "Daily", StringComparison.OrdinalIgnoreCase);
 
-                DateTime scheduledDate = completedDate.Date; // e.g. 09.09.2026 00:00
-                DateTime endDateForDb = isDaily ? completedDate.Date.AddHours(23).AddMinutes(59) : completedDate.Date.AddHours(23).AddMinutes(59); // e.g. 09.09.2026 23:59
+                DateTime scheduledDate = completedDate.Date;
+                DateTime endDateForDb = completedDate.Date.AddHours(23).AddMinutes(59);
 
-                // 1. DIRECTLY UPDATE the task record in dbo.FormData_V2
-                string updateTaskSql = @"
-                    UPDATE dbo.FormData_V2 
-                    SET Status = @Status,
-                        Remark = @Remark,
-                        Completed_on = @Completed_on,
-                        Scheduled_Date = @Scheduled_Date,
-                        End_Date = @End_Date,
-                        Updated_on = GETDATE(),
-                        Updated_by = @Updated_by
-                    WHERE ID = @ID OR (Node_Name = @Node_Name AND Maintenance_Task = @FullTaskName AND Frequency = @Frequency)";
+                // 1. Insert or Update dbo.Formdata_V3
+                string saveFormSql = @"
+                    IF EXISTS (SELECT 1 FROM dbo.Formdata_V3 WHERE Sc_ID = @Sc_ID)
+                    BEGIN
+                        UPDATE dbo.Formdata_V3 
+                        SET Status = @Status,
+                            Remark = @Remark,
+                            Completed_On = @Completed_On,
+                            Completed_By = @Completed_By,
+                            Scheduled_Date = @Scheduled_Date,
+                            End_Date = @End_Date" + (picBytes != null ? ", Pictures = @Pictures" : "") + @"
+                        WHERE Sc_ID = @Sc_ID
+                    END
+                    ELSE
+                    BEGIN
+                        INSERT INTO dbo.Formdata_V3 
+                        (Sc_ID, Node_Name, Platform, Task, Status, Remark, Scheduled_Date, End_Date, Completed_On, Completed_By, Pictures)
+                        VALUES 
+                        (@Sc_ID, @Node_Name, @Platform, @FullTaskName, @Status, @Remark, @Scheduled_Date, @End_Date, @Completed_On, @Completed_By, @Pictures)
+                    END";
 
-                using (SqlCommand cmd = new SqlCommand(updateTaskSql, conn))
+                using (SqlCommand cmd = new SqlCommand(saveFormSql, conn))
                 {
+                    cmd.Parameters.AddWithValue("@Sc_ID", scId);
+                    cmd.Parameters.AddWithValue("@Node_Name", nodeName);
+                    cmd.Parameters.AddWithValue("@Platform", platform);
+                    cmd.Parameters.AddWithValue("@FullTaskName", fullTask);
                     cmd.Parameters.AddWithValue("@Status", status);
                     cmd.Parameters.AddWithValue("@Remark", compiledRemark);
-                    cmd.Parameters.AddWithValue("@Completed_on", completedDate);
                     cmd.Parameters.AddWithValue("@Scheduled_Date", scheduledDate);
                     cmd.Parameters.AddWithValue("@End_Date", endDateForDb);
-                    cmd.Parameters.AddWithValue("@Updated_by", updatedBy);
-                    cmd.Parameters.AddWithValue("@ID", formId);
-                    cmd.Parameters.AddWithValue("@Node_Name", nodeName);
-                    cmd.Parameters.AddWithValue("@FullTaskName", fullTask);
-                    cmd.Parameters.AddWithValue("@Frequency", isDaily ? "Daily" : taskFreq);
-                    int rows = cmd.ExecuteNonQuery();
-                    updatedCount += rows;
+                    cmd.Parameters.AddWithValue("@Completed_On", completedDate);
+                    cmd.Parameters.AddWithValue("@Completed_By", updatedBy);
+                    if (picBytes != null)
+                    {
+                        cmd.Parameters.Add("@Pictures", SqlDbType.VarBinary, -1).Value = picBytes;
+                    }
+                    else
+                    {
+                        cmd.Parameters.Add("@Pictures", SqlDbType.VarBinary, -1).Value = DBNull.Value;
+                    }
+                    cmd.ExecuteNonQuery();
+                    updatedCount++;
                 }
 
-                // 2. DIRECTLY UPDATE dbo.Schedule_V2 with observation remarks and matching Start_Date / End_Date
+                // 2. Update dbo.Schedule_V3 remark
                 string updateScheduleSql = @"
-                    UPDATE dbo.Schedule_V2 
-                    SET Remark = @Remark,
-                        Start_Date = @Scheduled_Date,
-                        End_Date = @End_Date
-                    WHERE ID = @Sc_ID OR (Node_Name = @Node_Name AND Task = @FullTaskName)";
+                    UPDATE dbo.Schedule_V3 
+                    SET Remark = @Remark
+                    WHERE ID = @Sc_ID";
 
                 using (SqlCommand cmdSch = new SqlCommand(updateScheduleSql, conn))
                 {
                     cmdSch.Parameters.AddWithValue("@Remark", compiledRemark);
-                    cmdSch.Parameters.AddWithValue("@Scheduled_Date", scheduledDate);
-                    cmdSch.Parameters.AddWithValue("@End_Date", endDateForDb);
                     cmdSch.Parameters.AddWithValue("@Sc_ID", scId);
-                    cmdSch.Parameters.AddWithValue("@Node_Name", nodeName);
-                    cmdSch.Parameters.AddWithValue("@FullTaskName", fullTask);
                     cmdSch.ExecuteNonQuery();
-                }
-
-                // 3. For Daily tasks: Also maintain daily historical log record in dbo.FormData_V2
-                if (isDaily)
-                {
-                    int existingCompletedId = 0;
-                    string checkSql = @"
-                        SELECT TOP 1 ID FROM dbo.FormData_V2 
-                        WHERE Sc_ID = @Sc_ID 
-                          AND ID <> @FormID
-                          AND Status IN ('Closed', 'Completed', 'Close') 
-                          AND CAST(Completed_on AS date) = @CompletedDate";
-
-                    using (SqlCommand cmdCheck = new SqlCommand(checkSql, conn))
-                    {
-                        cmdCheck.Parameters.AddWithValue("@Sc_ID", scId);
-                        cmdCheck.Parameters.AddWithValue("@FormID", formId);
-                        cmdCheck.Parameters.AddWithValue("@CompletedDate", completedDate.Date);
-                        object res = cmdCheck.ExecuteScalar();
-                        if (res != null && res != DBNull.Value)
-                        {
-                            existingCompletedId = Convert.ToInt32(res);
-                        }
-                    }
-
-                    if (existingCompletedId > 0)
-                    {
-                        string updateLogSql = @"
-                            UPDATE dbo.FormData_V2 
-                            SET Status = @Status,
-                                Remark = @Remark,
-                                Scheduled_Date = @Scheduled_Date,
-                                End_Date = @End_Date,
-                                Completed_on = @Completed_on,
-                                Updated_on = GETDATE(),
-                                Updated_by = @Updated_by
-                            WHERE ID = @ID";
-
-                        using (SqlCommand cmdLog = new SqlCommand(updateLogSql, conn))
-                        {
-                            cmdLog.Parameters.AddWithValue("@Status", status);
-                            cmdLog.Parameters.AddWithValue("@Remark", compiledRemark);
-                            cmdLog.Parameters.AddWithValue("@Scheduled_Date", scheduledDate);
-                            cmdLog.Parameters.AddWithValue("@End_Date", endDateForDb);
-                            cmdLog.Parameters.AddWithValue("@Completed_on", completedDate);
-                            cmdLog.Parameters.AddWithValue("@Updated_by", updatedBy);
-                            cmdLog.Parameters.AddWithValue("@ID", existingCompletedId);
-                            cmdLog.ExecuteNonQuery();
-                        }
-                    }
-                    else if (formId <= 258)
-                    {
-                        string insertLogSql = @"
-                            INSERT INTO dbo.FormData_V2 
-                            (Sc_ID, Node_Name, Platform, Maintenance_Task, Frequency, Status, Remark, Scheduled_Date, End_Date, Completed_on, Updated_on, Updated_by)
-                            VALUES 
-                            (@Sc_ID, @Node_Name, @Platform, @FullTaskName, 'Daily', @Status, @Remark, @Scheduled_Date, @End_Date, @Completed_on, GETDATE(), @Updated_by)";
-
-                        using (SqlCommand cmdIns = new SqlCommand(insertLogSql, conn))
-                        {
-                            cmdIns.Parameters.AddWithValue("@Sc_ID", scId);
-                            cmdIns.Parameters.AddWithValue("@Node_Name", nodeName);
-                            cmdIns.Parameters.AddWithValue("@Platform", platform);
-                            cmdIns.Parameters.AddWithValue("@FullTaskName", fullTask);
-                            cmdIns.Parameters.AddWithValue("@Status", status);
-                            cmdIns.Parameters.AddWithValue("@Remark", compiledRemark);
-                            cmdIns.Parameters.AddWithValue("@Scheduled_Date", scheduledDate);
-                            cmdIns.Parameters.AddWithValue("@End_Date", endDateForDb);
-                            cmdIns.Parameters.AddWithValue("@Completed_on", completedDate);
-                            cmdIns.Parameters.AddWithValue("@Updated_by", updatedBy);
-                            cmdIns.ExecuteNonQuery();
-                        }
-                    }
                 }
             }
         }
@@ -958,6 +993,7 @@
                                 <td>
                                     <asp:HiddenField ID="hdnFormId" runat="server" Value='<%# Eval("FormId") %>' />
                                     <asp:HiddenField ID="hdnFullTaskName" runat="server" Value='<%# Eval("FullTaskName") %>' />
+                                    <asp:HiddenField ID="hdnSubTaskName" runat="server" Value='<%# Eval("SubTaskName") %>' />
                                     <asp:HiddenField ID="hdnIsValue" runat="server" Value='<%# Eval("IsValueTask") %>' />
                                     <asp:Label ID="lblSubTaskName" runat="server" Text='<%# Eval("SubTaskName") %>' CssClass="task-name-label"></asp:Label>
                                     <span class="task-frequency-tag"><%# Eval("Frequency") %></span>
@@ -978,7 +1014,14 @@
                                     </asp:Panel>
                                 </td>
                                 <td>
-                                    <asp:TextBox ID="txtRemark" runat="server" Text='<%# Eval("Remark") %>' TextMode="MultiLine" Rows="2" CssClass="remark-box"></asp:TextBox>
+                                    <asp:TextBox ID="txtRemark" runat="server" Text='<%# Eval("Remark") %>' TextMode="MultiLine" Rows="2" CssClass="remark-box" placeholder="Observation / Remarks (Optional)"></asp:TextBox>
+                                    <asp:Panel ID="pnlPhotoUpload" runat="server" Visible='<%# Eval("CanUploadPhoto") %>' style="margin-top: 8px; padding: 6px 10px; background-color: #f8fafc; border: 1px dashed #94a3b8; border-radius: 4px;">
+                                        <div style="font-size: 11px; font-weight: 600; color: #334155; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                                            <span>&#128247; Upload Task Photo (Optional):</span>
+                                            <%# Convert.ToBoolean(Eval("HasExistingPicture")) ? "<span style='color:#16a34a;font-size:11px;font-weight:bold;'>&#10003; Photo Saved</span>" : "" %>
+                                        </div>
+                                        <asp:FileUpload ID="fuPhoto" runat="server" accept="image/*" style="font-size: 11px; width: 100%; color: #475569;" />
+                                    </asp:Panel>
                                 </td>
                             </tr>
                         </ItemTemplate>

@@ -47,19 +47,51 @@
     {
         if (taskObj == null || taskObj == DBNull.Value) return "";
         string taskStr = taskObj.ToString();
-        if (string.IsNullOrEmpty(taskStr)) return "";
+        if (string.IsNullOrWhiteSpace(taskStr)) return "";
 
-        string[] tasks = taskStr.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
-        if (tasks.Length <= 1)
+        List<string> subtasks = new List<string>();
+        string raw = taskStr.Trim();
+
+        if (raw.Contains("|"))
         {
-            return Server.HtmlEncode(taskStr.Trim());
+            string[] parts = raw.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string p in parts)
+            {
+                if (!string.IsNullOrWhiteSpace(p)) subtasks.Add(p.Trim());
+            }
+        }
+        else if (raw.Contains("\n") || raw.Contains("\r"))
+        {
+            string[] parts = raw.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string p in parts)
+            {
+                if (!string.IsNullOrWhiteSpace(p)) subtasks.Add(p.Trim());
+            }
+        }
+        else if (System.Text.RegularExpressions.Regex.IsMatch(raw, @"(?:^|\s+)1[\.\)]") &&
+                 System.Text.RegularExpressions.Regex.IsMatch(raw, @"(?:^|\s+)2[\.\)]"))
+        {
+            string[] parts = System.Text.RegularExpressions.Regex.Split(raw, @"(?<=\S)\s+(?=\d+[\.\)])");
+            foreach (string p in parts)
+            {
+                if (!string.IsNullOrWhiteSpace(p)) subtasks.Add(p.Trim());
+            }
+        }
+        else
+        {
+            subtasks.Add(raw);
+        }
+
+        if (subtasks.Count <= 1)
+        {
+            return Server.HtmlEncode(subtasks.Count == 1 ? subtasks[0] : raw);
         }
 
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
         sb.Append("<div class='subtask-list'>");
-        for (int i = 0; i < tasks.Length; i++)
+        for (int i = 0; i < subtasks.Count; i++)
         {
-            string t = tasks[i].Trim();
+            string t = subtasks[i].Trim();
             if (!string.IsNullOrEmpty(t))
             {
                 sb.Append("<div class='subtask-item'>");
@@ -311,6 +343,7 @@
                     <asp:QueryStringParameter DefaultValue="All" Name="LEA_Name" QueryStringField="LEA_Name" Type="String" />
                     <asp:ControlParameter ControlID="ddlPlatformFilter" DefaultValue="All" Name="Platform" PropertyName="SelectedValue" Type="String" />
                     <asp:ControlParameter ControlID="ddlFrequencyFilter" DefaultValue="All" Name="FrequencyType" PropertyName="SelectedValue" Type="String" />
+                    <asp:SessionParameter Name="service_no" SessionField="serviceno" Type="String" DefaultValue="" />
                 </SelectParameters>
             </asp:SqlDataSource>
         </div>

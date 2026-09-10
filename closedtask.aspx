@@ -33,10 +33,10 @@
             string sql = @"
                 SELECT 
                     COUNT(*) AS TotalCompleted,
-                    COUNT(CASE WHEN COALESCE(f.Frequency, s.Frequency) = 'Daily' THEN 1 END) AS DailyCompleted,
-                    COUNT(CASE WHEN COALESCE(f.Frequency, s.Frequency) <> 'Daily' OR COALESCE(f.Frequency, s.Frequency) IS NULL THEN 1 END) AS PeriodicCompleted
-                FROM dbo.FormData_V2 f
-                LEFT JOIN dbo.Schedule_V2 s ON f.Sc_ID = s.ID
+                    COUNT(CASE WHEN s.Remark = 'Daily' OR DATEDIFF(day, s.Start_Date, s.End_Date) <= 2 THEN 1 END) AS DailyCompleted,
+                    COUNT(CASE WHEN s.Remark <> 'Daily' AND DATEDIFF(day, s.Start_Date, s.End_Date) > 2 THEN 1 END) AS PeriodicCompleted
+                FROM dbo.Formdata_V3 f
+                LEFT JOIN dbo.Schedule_V3 s ON f.Sc_ID = s.ID
                 WHERE f.Status IN ('Closed', 'Completed', 'Close')";
 
             using (SqlCommand cmd = new SqlCommand(sql, conn))
@@ -67,26 +67,35 @@
                     END AS LEA_Name,
                     COALESCE(s.Platform, f.Platform) AS Platform,
                     COALESCE(f.Node_Name, s.Node_Name) AS Node_Name,
-                    f.Maintenance_Task,
-                    COALESCE(f.Frequency, s.Frequency) AS Frequency,
-                    f.Scheduled_Date,
-                    f.End_Date,
-                    COALESCE(f.Completed_on, f.Updated_on, f.End_Date) AS Completed_On,
+                    COALESCE(f.Task, s.Task) AS Maintenance_Task,
+                    CASE 
+                        WHEN s.Remark = 'Daily' OR DATEDIFF(day, s.Start_Date, s.End_Date) <= 2 THEN 'Daily'
+                        WHEN s.Remark = 'Weekly' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 6 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 8) THEN 'Weekly'
+                        WHEN s.Remark = 'Monthly' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 25 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 32) THEN 'Monthly'
+                        WHEN s.Remark = 'Every two months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 50 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 65) THEN 'Bi-Monthly'
+                        WHEN s.Remark = 'Every three months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 80 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 95) THEN 'Quarterly'
+                        WHEN s.Remark = 'Every six months' OR (DATEDIFF(day, s.Start_Date, s.End_Date) >= 170 AND DATEDIFF(day, s.Start_Date, s.End_Date) <= 190) THEN 'Half-Yearly'
+                        WHEN s.Remark = 'Once a year' OR DATEDIFF(day, s.Start_Date, s.End_Date) >= 350 THEN 'Annually'
+                        ELSE ISNULL(NULLIF(s.Remark, ''), 'Periodic')
+                    END AS Frequency,
+                    COALESCE(f.Scheduled_Date, s.Start_Date) AS Scheduled_Date,
+                    COALESCE(f.End_Date, s.End_Date) AS End_Date,
+                    COALESCE(f.Completed_On, f.End_Date) AS Completed_On,
                     f.Status,
                     f.Remark
-                FROM dbo.FormData_V2 f
-                LEFT JOIN dbo.Schedule_V2 s ON f.Sc_ID = s.ID
+                FROM dbo.Formdata_V3 f
+                LEFT JOIN dbo.Schedule_V3 s ON f.Sc_ID = s.ID
                 LEFT JOIN dbo.Lea2 l ON s.LEA = l.LEA
                 WHERE f.Status IN ('Closed', 'Completed', 'Close')";
 
             string freqFilter = ddlFrequencyFilter.SelectedValue;
             if (freqFilter == "Daily")
             {
-                sql += " AND COALESCE(f.Frequency, s.Frequency) = 'Daily'";
+                sql += " AND (s.Remark = 'Daily' OR DATEDIFF(day, s.Start_Date, s.End_Date) <= 2)";
             }
             else if (freqFilter == "Periodic")
             {
-                sql += " AND (COALESCE(f.Frequency, s.Frequency) <> 'Daily' OR COALESCE(f.Frequency, s.Frequency) IS NULL)";
+                sql += " AND (s.Remark <> 'Daily' AND DATEDIFF(day, s.Start_Date, s.End_Date) > 2)";
             }
 
             string platFilter = ddlPlatformFilter.SelectedValue;
@@ -98,10 +107,10 @@
             string search = txtSearch.Text.Trim();
             if (!string.IsNullOrEmpty(search))
             {
-                sql += " AND (f.Node_Name LIKE @Search OR f.Maintenance_Task LIKE @Search OR l.LEA_Name LIKE @Search)";
+                sql += " AND (f.Node_Name LIKE @Search OR f.Task LIKE @Search OR s.Task LIKE @Search OR l.LEA_Name LIKE @Search)";
             }
 
-            sql += " ORDER BY f.Completed_on DESC, f.ID ASC";
+            sql += " ORDER BY f.Completed_On DESC, f.ID ASC";
 
             using (SqlCommand cmd = new SqlCommand(sql, conn))
             {
@@ -140,11 +149,11 @@
                         WHEN l.LEA_Name IS NOT NULL AND l.LEA_Name <> '' AND l.LEA_Name <> 'NULL' THEN l.LEA_Name 
                         ELSE ISNULL(s.LEA, 'Unknown') 
                     END AS LEA_Name,
-                    COUNT(CASE WHEN COALESCE(f.Frequency, s.Frequency) = 'Daily' THEN 1 END) AS Daily_Completed,
-                    COUNT(CASE WHEN COALESCE(f.Frequency, s.Frequency) <> 'Daily' OR COALESCE(f.Frequency, s.Frequency) IS NULL THEN 1 END) AS Periodic_Completed,
+                    COUNT(CASE WHEN s.Remark = 'Daily' OR DATEDIFF(day, s.Start_Date, s.End_Date) <= 2 THEN 1 END) AS Daily_Completed,
+                    COUNT(CASE WHEN s.Remark <> 'Daily' AND DATEDIFF(day, s.Start_Date, s.End_Date) > 2 THEN 1 END) AS Periodic_Completed,
                     COUNT(*) AS Total_Completed
-                FROM dbo.FormData_V2 f
-                LEFT JOIN dbo.Schedule_V2 s ON f.Sc_ID = s.ID
+                FROM dbo.Formdata_V3 f
+                LEFT JOIN dbo.Schedule_V3 s ON f.Sc_ID = s.ID
                 LEFT JOIN dbo.Lea2 l ON s.LEA = l.LEA
                 WHERE f.Status IN ('Closed', 'Completed', 'Close')
                 GROUP BY 
