@@ -16,9 +16,9 @@
 
     void Session_Start(object sender, EventArgs e) 
     {
-        // Bypass login globally by pre-authenticating every session as Admin
+        // Pre-authenticate session as service number 012264 (Yamuna, Admin)
         Session["serviceno"] = "012264";
-        Session["username"] = "Admin";
+        Session["username"] = "Yamuna";
         Session["user_profile"] = "admin";
         Session["passwd"] = "";
     }

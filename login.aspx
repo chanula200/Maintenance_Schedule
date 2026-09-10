@@ -5,7 +5,7 @@
     {
         // Auto-authenticate as Admin and redirect to welcome page
         Session["serviceno"] = "012264";
-        Session["username"] = "Admin";
+        Session["username"] = "Yamuna";
         Session["user_profile"] = "admin";
         Session["passwd"] = "";
         Response.Redirect("welcome.aspx");

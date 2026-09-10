@@ -3,10 +3,10 @@
 <script runat="server">
     protected void Page_Init(object sender, EventArgs e)
     {
-        if (Session["serviceno"] == null || string.IsNullOrEmpty(Session["serviceno"].ToString()))
+        if (Session["serviceno"] == null || Session["serviceno"].ToString() == "020196" || Session["serviceno"].ToString() == "012281")
         {
             Session["serviceno"] = "012264";
-            Session["username"] = "Admin";
+            Session["username"] = "Yamuna";
             Session["user_profile"] = "admin";
             Session["passwd"] = "";
         }
