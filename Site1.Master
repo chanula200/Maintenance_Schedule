@@ -3,12 +3,15 @@
 <script runat="server">
     protected void Page_Init(object sender, EventArgs e)
     {
-        if (Session["serviceno"] == null || string.IsNullOrEmpty(Session["serviceno"].ToString()))
+        string path = Request.AppRelativeCurrentExecutionFilePath ?? "";
+        string pageName = System.IO.Path.GetFileName(path).ToLower();
+        if (!pageName.Equals("login.aspx", StringComparison.OrdinalIgnoreCase) &&
+            !pageName.Equals("logout.aspx", StringComparison.OrdinalIgnoreCase))
         {
-            Session["serviceno"] = "012264";
-            Session["username"] = "Admin";
-            Session["user_profile"] = "admin";
-            Session["passwd"] = "";
+            if (Session["serviceno"] == null || string.IsNullOrWhiteSpace(Session["serviceno"].ToString()))
+            {
+                Response.Redirect("~/login.aspx", true);
+            }
         }
     }
 </script>
@@ -109,7 +112,7 @@
                         <asp:MenuItem Text="International" Value="International">
                             <asp:MenuItem Text="Dashboards" Value="Dashboards">
                                 <asp:MenuItem NavigateUrl="~/View.aspx" Text="View Recent" Value="View Recent"></asp:MenuItem>
-                                <asp:MenuItem NavigateUrl="~/summary.aspx" Text="Summary" Value="Summary"></asp:MenuItem>
+                                <asp:MenuItem NavigateUrl="~/NewSummary.aspx" Text="Summary" Value="Summary"></asp:MenuItem>
                                 <asp:MenuItem NavigateUrl="~/pwdb.aspx" Text="History View" Value="History View"></asp:MenuItem>
                             </asp:MenuItem>
                             <asp:MenuItem NavigateUrl="~/NewToDo.aspx" Text="To Do" Value="To Do"></asp:MenuItem>
