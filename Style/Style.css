@@ -1,4 +1,4 @@
-﻿body   
+body   
 {
     background: #b6b7bc;
     font-size: .80em;
@@ -23,6 +23,37 @@ a:hover
 a:active
 {
     color: #034af3;
+}
+
+/* Ensure all buttons, badges, and dark header links always have white text */
+a[class*="btn-"],
+a.btn-action-primary,
+a.btn-fill-task,
+a.btn-action-completed,
+a.btn-action-primary:link,
+a.btn-action-primary:visited,
+a.btn-fill-task:link,
+a.btn-fill-task:visited,
+.btn-action-primary,
+.btn-fill-task,
+th a,
+th a:link,
+th a:visited,
+.cal-title a,
+.cal-title a:link,
+.cal-title a:visited
+{
+    color: #ffffff !important;
+    text-decoration: none !important;
+}
+
+a[class*="btn-"]:hover,
+a.btn-action-primary:hover,
+a.btn-fill-task:hover,
+th a:hover
+{
+    color: #ffffff !important;
+    text-decoration: none !important;
 }
 
 p

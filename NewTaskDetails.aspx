@@ -168,10 +168,18 @@
         }
         .grid-header {
             background-color: #507CD1;
-            color: White;
+            color: #ffffff !important;
             font-weight: bold;
             height: 35px;
             text-align: center;
+        }
+        .grid-header th a,
+        .grid-header a,
+        .grid-header a:link,
+        .grid-header a:visited,
+        .grid-header a:hover {
+            color: #ffffff !important;
+            text-decoration: none !important;
         }
         .grid-row {
             background-color: #EFF3FB;
@@ -224,20 +232,25 @@
             font-size: 11px;
             font-weight: bold;
         }
-        .btn-back {
-            background-color: #4b6c9e;
-            color: #ffffff;
+        .btn-back,
+        a.btn-back,
+        a:link.btn-back,
+        a:visited.btn-back,
+        a:hover.btn-back {
+            background-color: #4b6c9e !important;
+            color: #ffffff !important;
             border: none;
             padding: 6px 14px;
             border-radius: 3px;
             cursor: pointer;
             font-size: 13px;
-            text-decoration: none;
+            text-decoration: none !important;
             display: inline-block;
         }
-        .btn-back:hover {
-            background-color: #2461BF;
-            color: #ffffff;
+        .btn-back:hover,
+        a.btn-back:hover {
+            background-color: #2461BF !important;
+            color: #ffffff !important;
         }
     </style>
 </asp:Content>

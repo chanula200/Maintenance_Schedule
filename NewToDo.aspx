@@ -69,7 +69,7 @@
                 return "1=1";
             }
 
-            string sqlAdmin = "SELECT COUNT(*) FROM dbo.Admin WHERE service_no = @srv OR service_no = RIGHT('000000' + @srv, 6) OR @srv = RIGHT('000000' + service_no, 6)";
+            string sqlAdmin = "SELECT COUNT(*) FROM dbo.Admin WHERE (service_no = @srv OR service_no = RIGHT('000000' + @srv, 6) OR @srv = RIGHT('000000' + service_no, 6)) AND (Name IS NOT NULL AND LTRIM(RTRIM(Name)) <> '')";
             using (SqlCommand cmdA = new SqlCommand(sqlAdmin, conn))
             {
                 cmdA.Parameters.AddWithValue("@srv", srvNo);
@@ -87,7 +87,13 @@
         }
         else if (userProfile == "Network Engineer" || string.IsNullOrEmpty(userProfile) || userProfile == "2nd Owner" || userProfile == "3rd Owner")
         {
-            return "(s.Responsibility = 'Network Engineer' AND (l.service_no = '" + srvNo.Replace("'", "''") + "' OR l.service_no = RIGHT('000000' + '" + srvNo.Replace("'", "''") + "', 6) OR '" + srvNo.Replace("'", "''") + "' = RIGHT('000000' + l.service_no, 6)" + (string.IsNullOrEmpty(userSup) ? "" : " OR l.service_no = '" + userSup.Replace("'", "''") + "' OR l.service_no = RIGHT('000000' + '" + userSup.Replace("'", "''") + "', 6)") + "))";
+            string srvClean = srvNo.Replace("'", "''");
+            string supClean = !string.IsNullOrEmpty(userSup) ? userSup.Replace("'", "''") : "";
+            return "((l.service_no IS NOT NULL AND (TRY_CAST(l.service_no AS INT) = TRY_CAST('" + srvClean + "' AS INT) OR RIGHT('000000' + CAST(CAST(l.service_no AS INT) AS VARCHAR(50)), 6) = RIGHT('000000' + '" + srvClean + "', 6)))" +
+                   " OR (l.Owner2 IS NOT NULL AND TRY_CAST(l.Owner2 AS INT) = TRY_CAST('" + srvClean + "' AS INT))" +
+                   " OR (l.Owner3 IS NOT NULL AND (l.Owner3 = '" + srvClean + "' OR TRY_CAST(l.Owner3 AS INT) = TRY_CAST('" + srvClean + "' AS INT) OR RIGHT('000000' + LTRIM(RTRIM(l.Owner3)), 6) = RIGHT('000000' + '" + srvClean + "', 6)))" +
+                   (!string.IsNullOrEmpty(supClean) ? " OR (l.service_no IS NOT NULL AND (TRY_CAST(l.service_no AS INT) = TRY_CAST('" + supClean + "' AS INT) OR RIGHT('000000' + CAST(CAST(l.service_no AS INT) AS VARCHAR(50)), 6) = RIGHT('000000' + '" + supClean + "', 6)))" : "") +
+                   ")";
         }
         return "1=1";
     }
@@ -507,26 +513,32 @@
                                 }
 
                                 /* Buttons */
-                                .btn-action-primary {
-                                    background-color: #2461BF;
-                                    color: #ffffff;
+                                .btn-action-primary,
+                                a.btn-action-primary,
+                                a:link.btn-action-primary,
+                                a:visited.btn-action-primary,
+                                a:hover.btn-action-primary,
+                                a:active.btn-action-primary {
+                                    background-color: #2461BF !important;
+                                    color: #ffffff !important;
                                     border: none;
                                     padding: 5px 12px;
                                     border-radius: 4px;
                                     font-size: 12px;
                                     font-weight: 600;
                                     cursor: pointer;
-                                    text-decoration: none;
+                                    text-decoration: none !important;
                                     display: inline-flex;
                                     align-items: center;
                                     gap: 4px;
                                     transition: background 0.15s;
                                 }
 
-                                .btn-action-primary:hover {
-                                    background-color: #1d4ed8;
-                                    color: #ffffff;
-                                    text-decoration: none;
+                                .btn-action-primary:hover,
+                                a.btn-action-primary:hover {
+                                    background-color: #1d4ed8 !important;
+                                    color: #ffffff !important;
+                                    text-decoration: none !important;
                                 }
 
                                 .btn-toolbar {
@@ -780,22 +792,28 @@
                                     color: #64748b;
                                 }
 
-                                .btn-fill-task {
-                                    background-color: #0284c7;
-                                    color: #ffffff;
+                                .btn-fill-task,
+                                a.btn-fill-task,
+                                a:link.btn-fill-task,
+                                a:visited.btn-fill-task,
+                                a:hover.btn-fill-task,
+                                a:active.btn-fill-task {
+                                    background-color: #0284c7 !important;
+                                    color: #ffffff !important;
                                     padding: 3px 8px;
                                     border-radius: 3px;
                                     font-size: 11px;
                                     font-weight: 600;
-                                    text-decoration: none;
+                                    text-decoration: none !important;
                                     display: inline-block;
                                     white-space: nowrap;
                                 }
 
-                                .btn-fill-task:hover {
-                                    background-color: #0369a1;
-                                    color: #ffffff;
-                                    text-decoration: none;
+                                .btn-fill-task:hover,
+                                a.btn-fill-task:hover {
+                                    background-color: #0369a1 !important;
+                                    color: #ffffff !important;
+                                    text-decoration: none !important;
                                 }
 
                                 .no-data-box {
@@ -902,8 +920,8 @@
                                                         SelectCommand="GetToDOList_V2"
                                                         SelectCommandType="StoredProcedure">
                                                         <SelectParameters>
-                                                            <asp:Parameter DefaultValue="Periodic" Name="FrequencyType"
-                                                                Type="String" />
+                                                            <asp:SessionParameter Name="service_no" SessionField="serviceno" Type="String" DefaultValue="" />
+                                                            <asp:Parameter DefaultValue="Periodic" Name="FrequencyType" Type="String" />
                                                         </SelectParameters>
                                                     </asp:SqlDataSource>
                                                 </div>
@@ -925,13 +943,13 @@
                                                 <div
                                                     style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
                                                     <a href="closedtask.aspx?type=daily" class="btn-action-primary"
-                                                        style="background-color: #16a34a; font-size: 11.5px; padding: 4px 10px;"
+                                                        style="background-color: #16a34a !important; color: #ffffff !important; font-size: 11.5px; padding: 4px 10px;"
                                                         title="View daily completed tasks in Completed Tasks section">
                                                         &#10003; Completed Daily (<%= totalCompletedDaily %>) &raquo;
                                                     </a>
                                                     <a href="NewTaskDetails.aspx?LEA_Name=All&FrequencyType=Daily"
                                                         class="btn-action-primary"
-                                                        style="background-color: #0284c7; font-size: 11.5px; padding: 4px 10px;">
+                                                        style="background-color: #0284c7 !important; color: #ffffff !important; font-size: 11.5px; padding: 4px 10px;">
                                                         View All Daily (<%= totalPendingDaily %>) &raquo;
                                                     </a>
                                                 </div>

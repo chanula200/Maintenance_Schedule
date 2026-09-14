@@ -3,12 +3,15 @@
 <script runat="server">
     protected void Page_Init(object sender, EventArgs e)
     {
-        if (Session["serviceno"] == null || Session["serviceno"].ToString() == "020196" || Session["serviceno"].ToString() == "012281")
+        string path = Request.AppRelativeCurrentExecutionFilePath ?? "";
+        string pageName = System.IO.Path.GetFileName(path).ToLower();
+        if (!pageName.Equals("login.aspx", StringComparison.OrdinalIgnoreCase) &&
+            !pageName.Equals("logout.aspx", StringComparison.OrdinalIgnoreCase))
         {
-            Session["serviceno"] = "012264";
-            Session["username"] = "Yamuna";
-            Session["user_profile"] = "admin";
-            Session["passwd"] = "";
+            if (Session["serviceno"] == null || string.IsNullOrWhiteSpace(Session["serviceno"].ToString()))
+            {
+                Response.Redirect("~/login.aspx", true);
+            }
         }
     }
 </script>

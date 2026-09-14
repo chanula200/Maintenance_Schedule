@@ -19,20 +19,9 @@
         public string MeasuredValue { get; set; }
         public string Status { get; set; }
         public string Remark { get; set; }
-        public bool CanUploadPhoto { get; set; }
-        public bool HasExistingPicture { get; set; }
     }
 
-    private static bool CheckCanUploadPhoto(string taskName)
-    {
-        if (string.IsNullOrWhiteSpace(taskName)) return false;
-        string lower = taskName.ToLowerInvariant();
-        return lower.Contains("filter") || 
-               lower.Contains("cleaning") || 
-               lower.Contains("clean") || 
-               lower.Contains("picture") || 
-               lower.Contains("photo");
-    }
+
 
     private static bool CheckIsValueTask(string taskName, out string placeholder)
     {
@@ -398,7 +387,6 @@
 
                                 string placeholder;
                                 bool isVal = CheckIsValueTask(subName, out placeholder);
-                                bool canPhoto = CheckCanUploadPhoto(subName) || CheckCanUploadPhoto(rawTask);
 
                                 // Parse existing measurement and remark from compiled rowRemark if present
                                 string existingVal = "";
@@ -453,9 +441,7 @@
                                     ValuePlaceholder = placeholder,
                                     MeasuredValue = existingVal,
                                     Status = rowStatus,
-                                    Remark = existingRemark,
-                                    CanUploadPhoto = canPhoto,
-                                    HasExistingPicture = hasPic
+                                    Remark = existingRemark
                                 });
                             }
                         }
@@ -554,7 +540,6 @@
         Dictionary<string, List<string>> taskSummaryByFullTask = new Dictionary<string, List<string>>();
         Dictionary<string, string> finalStatusByFullTask = new Dictionary<string, string>();
         Dictionary<string, int> formIdByFullTask = new Dictionary<string, int>();
-        Dictionary<string, byte[]> pictureBytesByFullTask = new Dictionary<string, byte[]>();
 
         foreach (RepeaterItem item in rptTasks.Items)
         {
@@ -568,18 +553,12 @@
                 TextBox txtVal = (TextBox)item.FindControl("txtMeasuredValue");
                 DropDownList ddlStatus = (DropDownList)item.FindControl("ddlStatus");
                 TextBox txtRemark = (TextBox)item.FindControl("txtRemark");
-                FileUpload fuPhoto = (FileUpload)item.FindControl("fuPhoto");
 
                 int formId = Convert.ToInt32(hdnFormId.Value);
                 string fullTask = hdnFullTask.Value;
                 string subName = hdnSubTask != null ? hdnSubTask.Value : "";
                 bool isVal = hdnIsValue != null ? Convert.ToBoolean(hdnIsValue.Value) : false;
                 string remark = txtRemark != null ? txtRemark.Text.Trim() : "";
-
-                if (fuPhoto != null && fuPhoto.HasFile && fuPhoto.FileBytes != null && fuPhoto.FileBytes.Length > 0)
-                {
-                    pictureBytesByFullTask[fullTask] = fuPhoto.FileBytes;
-                }
 
                 string itemStatus = "Completed";
                 string recordDetail = "";
@@ -634,7 +613,6 @@
                 int formId = formIdByFullTask[fullTask];
                 string compiledRemark = string.Join(" | ", kvp.Value);
                 string status = finalStatusByFullTask[fullTask];
-                byte[] picBytes = pictureBytesByFullTask.ContainsKey(fullTask) ? pictureBytesByFullTask[fullTask] : null;
 
                 // Fetch metadata for this task (Platform, Frequency) from Schedule_V3
                 int scId = formId;
@@ -669,15 +647,15 @@
                             Completed_On = @Completed_On,
                             Completed_By = @Completed_By,
                             Scheduled_Date = @Scheduled_Date,
-                            End_Date = @End_Date" + (picBytes != null ? ", Pictures = @Pictures" : "") + @"
+                            End_Date = @End_Date
                         WHERE Sc_ID = @Sc_ID
                     END
                     ELSE
                     BEGIN
                         INSERT INTO dbo.Formdata_V3 
-                        (Sc_ID, Node_Name, Platform, Task, Status, Remark, Scheduled_Date, End_Date, Completed_On, Completed_By, Pictures)
+                        (Sc_ID, Node_Name, Platform, Task, Status, Remark, Scheduled_Date, End_Date, Completed_On, Completed_By)
                         VALUES 
-                        (@Sc_ID, @Node_Name, @Platform, @FullTaskName, @Status, @Remark, @Scheduled_Date, @End_Date, @Completed_On, @Completed_By, @Pictures)
+                        (@Sc_ID, @Node_Name, @Platform, @FullTaskName, @Status, @Remark, @Scheduled_Date, @End_Date, @Completed_On, @Completed_By)
                     END";
 
                 using (SqlCommand cmd = new SqlCommand(saveFormSql, conn))
@@ -692,14 +670,6 @@
                     cmd.Parameters.AddWithValue("@End_Date", endDateForDb);
                     cmd.Parameters.AddWithValue("@Completed_On", completedDate);
                     cmd.Parameters.AddWithValue("@Completed_By", updatedBy);
-                    if (picBytes != null)
-                    {
-                        cmd.Parameters.Add("@Pictures", SqlDbType.VarBinary, -1).Value = picBytes;
-                    }
-                    else
-                    {
-                        cmd.Parameters.Add("@Pictures", SqlDbType.VarBinary, -1).Value = DBNull.Value;
-                    }
                     cmd.ExecuteNonQuery();
                     updatedCount++;
                 }
@@ -729,48 +699,44 @@
         calCompleted.Visible = !calCompleted.Visible;
         if (calCompleted.Visible)
         {
-            calCompleted.VisibleDate = DateTime.Today;
-            calCompleted.SelectedDate = DateTime.Today;
+            DateTime curDate;
+            if (DateTime.TryParse(txtCompletedDate.Text.Trim(), out curDate))
+            {
+                calCompleted.VisibleDate = curDate;
+                calCompleted.SelectedDate = curDate;
+            }
+            else
+            {
+                calCompleted.VisibleDate = DateTime.Today;
+                calCompleted.SelectedDate = DateTime.Today;
+            }
         }
     }
 
     protected void calCompleted_DayRender(object sender, DayRenderEventArgs e)
     {
-        // Enforce same day only: disable all past and future days
-        if (e.Day.Date != DateTime.Today)
+        // Allow choosing any date freely
+        e.Day.IsSelectable = true;
+        if (e.Day.IsToday)
         {
-            e.Day.IsSelectable = false;
-            e.Cell.ForeColor = System.Drawing.ColorTranslator.FromHtml("#94a3b8");
-            e.Cell.BackColor = System.Drawing.ColorTranslator.FromHtml("#f8fafc");
-            e.Cell.ToolTip = "Completion date can only be today (" + DateTime.Today.ToString("yyyy-MM-dd") + ")";
-            e.Cell.Attributes.Add("style", "cursor: not-allowed; opacity: 0.45; pointer-events: none;");
-        }
-        else
-        {
-            e.Day.IsSelectable = true;
             e.Cell.Font.Bold = true;
             e.Cell.BackColor = System.Drawing.ColorTranslator.FromHtml("#dcfce7");
             e.Cell.ForeColor = System.Drawing.ColorTranslator.FromHtml("#166534");
             e.Cell.ToolTip = "Today: " + DateTime.Today.ToString("yyyy-MM-dd");
-            e.Cell.Attributes.Add("style", "cursor: pointer; font-weight: bold; border: 2px solid #16a34a;");
+        }
+        else if (e.Day.IsSelected)
+        {
+            e.Cell.Font.Bold = true;
+            e.Cell.BackColor = System.Drawing.ColorTranslator.FromHtml("#16a34a");
+            e.Cell.ForeColor = System.Drawing.Color.White;
         }
     }
 
     protected void calCompleted_SelectionChanged(object sender, EventArgs e)
     {
-        // Strictly lock to today even if selection event fires
-        txtCompletedDate.Text = DateTime.Today.ToString("yyyy-MM-dd");
-        if (calCompleted.SelectedDate.Date != DateTime.Today)
-        {
-            lblMessage.Text = "Notice: Completion date must be today (" + DateTime.Today.ToString("yyyy-MM-dd") + "). Future and past days cannot be selected.";
-            lblMessage.ForeColor = System.Drawing.Color.Red;
-            lblMessage.Visible = true;
-        }
-        else
-        {
-            lblMessage.Visible = false;
-        }
+        txtCompletedDate.Text = calCompleted.SelectedDate.ToString("yyyy-MM-dd");
         calCompleted.Visible = false;
+        lblMessage.Visible = false;
     }
 </script>
 
@@ -893,8 +859,8 @@
             border-radius: 3px;
         }
         .btn-submit {
-            background-color: #4b6c9e;
-            color: #ffffff;
+            background-color: #4b6c9e !important;
+            color: #ffffff !important;
             font-size: 14px;
             font-weight: bold;
             padding: 8px 26px;
@@ -904,7 +870,8 @@
             margin-top: 15px;
         }
         .btn-submit:hover {
-            background-color: #2461BF;
+            background-color: #2461BF !important;
+            color: #ffffff !important;
         }
         .btn-back-link {
             display: inline-block;
@@ -954,25 +921,21 @@
 
             <div style="margin: 15px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
                 <span style="font-weight: bold; color: #000066; font-size: 14px;">Completed On: </span>
-                <asp:TextBox ID="txtCompletedDate" runat="server" Width="130px" ReadOnly="true" 
-                    style="padding: 5px 10px; font-size: 13px; font-weight: 600; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; color: #1e293b; cursor: not-allowed;" 
-                    onkeydown="return false;"></asp:TextBox>
-                <asp:ImageButton ID="ImageButton1" runat="server" Height="22px" ImageUrl="~/image/calendar.png" OnClick="ImageButton1_Click" Width="24px" style="vertical-align: middle; cursor: pointer;" ToolTip="Completion date must be today only" />
-                <span style="display: inline-flex; align-items: center; background-color: #ecfdf5; color: #065f46; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 10px; border: 1px solid #a7f3d0;">
-                    Today Only (Locked)
-                </span>
+                <asp:TextBox ID="txtCompletedDate" runat="server" Width="130px" 
+                    style="padding: 5px 10px; font-size: 13px; font-weight: 600; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; color: #1e293b;"></asp:TextBox>
+                <asp:ImageButton ID="ImageButton1" runat="server" Height="22px" ImageUrl="~/image/calendar.png" OnClick="ImageButton1_Click" Width="24px" style="vertical-align: middle; cursor: pointer;" ToolTip="Click to choose completion date" />
                 <div style="width: 100%;"></div>
                 <asp:Calendar ID="calCompleted" runat="server" BackColor="White" BorderColor="#3366CC" BorderWidth="1px" 
-                    CellPadding="1" DayNameFormat="Shortest" Font-Names="Verdana" Font-Size="8pt" ForeColor="#003399" 
-                    Height="180px" ShowNextPrevMonth="False" OnDayRender="calCompleted_DayRender" OnSelectionChanged="calCompleted_SelectionChanged" Visible="False" Width="220px" style="margin-top: 4px;">
+                    CellPadding="2" DayNameFormat="Shortest" Font-Names="Verdana" Font-Size="8pt" ForeColor="#003399" 
+                    Height="190px" ShowNextPrevMonth="True" OnDayRender="calCompleted_DayRender" OnSelectionChanged="calCompleted_SelectionChanged" Visible="False" Width="240px" style="margin-top: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 6px; z-index: 100;">
                     <DayHeaderStyle BackColor="#99CCCC" ForeColor="#336666" Height="1px" />
-                    <NextPrevStyle Font-Size="8pt" ForeColor="#CCCCFF" />
-                    <OtherMonthDayStyle ForeColor="#cbd5e1" />
+                    <NextPrevStyle Font-Size="9pt" ForeColor="#FFFFFF" Font-Bold="True" />
+                    <OtherMonthDayStyle ForeColor="#94a3b8" />
                     <SelectedDayStyle BackColor="#16a34a" Font-Bold="True" ForeColor="#ffffff" />
                     <SelectorStyle BackColor="#99CCCC" ForeColor="#336666" />
-                    <TitleStyle BackColor="#003399" BorderColor="#3366CC" BorderWidth="1px" Font-Bold="True" Font-Size="10pt" ForeColor="#CCCCFF" Height="25px" />
+                    <TitleStyle BackColor="#003399" BorderColor="#3366CC" BorderWidth="1px" Font-Bold="True" Font-Size="10pt" ForeColor="#FFFFFF" Height="28px" />
                     <TodayDayStyle BackColor="#dcfce7" ForeColor="#166534" Font-Bold="True" />
-                    <WeekendDayStyle BackColor="#f8fafc" ForeColor="#94a3b8" />
+                    <WeekendDayStyle BackColor="#f8fafc" ForeColor="#64748b" />
                 </asp:Calendar>
             </div>
 
@@ -1015,13 +978,6 @@
                                 </td>
                                 <td>
                                     <asp:TextBox ID="txtRemark" runat="server" Text='<%# Eval("Remark") %>' TextMode="MultiLine" Rows="2" CssClass="remark-box" placeholder="Observation / Remarks (Optional)"></asp:TextBox>
-                                    <asp:Panel ID="pnlPhotoUpload" runat="server" Visible='<%# Eval("CanUploadPhoto") %>' style="margin-top: 8px; padding: 6px 10px; background-color: #f8fafc; border: 1px dashed #94a3b8; border-radius: 4px;">
-                                        <div style="font-size: 11px; font-weight: 600; color: #334155; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
-                                            <span>&#128247; Upload Task Photo (Optional):</span>
-                                            <%# Convert.ToBoolean(Eval("HasExistingPicture")) ? "<span style='color:#16a34a;font-size:11px;font-weight:bold;'>&#10003; Photo Saved</span>" : "" %>
-                                        </div>
-                                        <asp:FileUpload ID="fuPhoto" runat="server" accept="image/*" style="font-size: 11px; width: 100%; color: #475569;" />
-                                    </asp:Panel>
                                 </td>
                             </tr>
                         </ItemTemplate>
